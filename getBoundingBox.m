@@ -1,4 +1,4 @@
-function [x1, y1, x2, y2] = getBoundingBox(x, y, scale, padx, pady, rsize)
+function [bbox] = getBoundingBox(x, y, scale, padx, pady, rsize)
 
 % Gets original pixel coordinate bounding box of a block in the
 % pyramid level.
@@ -17,3 +17,4 @@ x1 = (x-padx)*scale+1;
 y1 = (y-pady)*scale+1;
 x2 = x1 + rsize(2)*scale - 1;
 y2 = y1 + rsize(1)*scale - 1;
+bbox = [x1, y1, x2, y2];

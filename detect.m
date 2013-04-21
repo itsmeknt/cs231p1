@@ -32,8 +32,7 @@ for componentIdx=1:length(scores)
         for i = 1:length(I)
             x = X(i);
             y = Y(i);
-            [x1, y1, x2, y2] = getBoundingBox(x, y, scale, padx, pady, rsize);
-            b = [x1 y1 x2 y2];
+            b = getBoundingBox(x, y, scale, padx, pady, rsize);
             boxesEntry(i,:) = [b componentIdx score(I(i))];
         end
         boxes = [boxes; boxesEntry];

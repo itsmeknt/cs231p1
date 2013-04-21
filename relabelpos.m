@@ -7,15 +7,19 @@ filt_px_height=model.sbin*model.maxsize(1);
 newPos = pos;
 for i=1:size(pos,2)
     % Existing bounding box and image size
-    trueBbox = [pos(1,i).x1, pos(1.i).y1, pos(1,i).x2, pos(1,i).y2];
+    x1 = pos(1,i).x1;
+    x2 = pos(1,i).x2;
+    y1 = pos(1,i).y1;
+    y2 = pos(1,i).y2;
+    trueBbox = [x1, y1, x2, y2];
     bbox_width=pos(1,i).x2-pos(1,i).x1;
     bbox_height=pos(1,i).y2-pos(1,i).y1;
     image=imread(pos(1,i).im);
     image_size=size(image);
     
     % pad the existing bounding box
-    padx=0.3*min(bbox_width,filt_px_width);
-    pady=0.3*min(bbox_height,filt_px_height);
+    padx=ceil(0.3*min(bbox_width,filt_px_width));
+    pady=ceil(0.3*min(bbox_height,filt_px_height));
     
     % Compute range over which the root filter latent position is searched
     new_x1=max(1,pos(1,i).x1-padx);
@@ -36,14 +40,14 @@ for i=1:size(pos,2)
         rsize = model.rootfilters{model.components{c}.rootindex}.size;
         for level=1:length(scorePyramid)
             score = scorePyramid{level};
-            scale = scales(l);
+            scale = scales(level);
             
             x = -1;
             y = -1;
             while true
                 [maxCols, ys] = max(score);
-                [max, xs] = max(maxCols);
-                if (max <= maxScore)
+                [maxVal, xs] = max(maxCols);
+                if (maxVal <= maxScore)
                     break;
                 end
                 
@@ -57,7 +61,7 @@ for i=1:size(pos,2)
                     x = -1;
                     y = -1;
                 else
-                    maxScore = max;
+                    maxScore = maxVal;
                     maxBbox = predictedBbox;
                     break;
                 end
