@@ -1,0 +1,2 @@
+1. in modelinit.m, we can change the number of components (perspectives) for each part
+2. number of pyramid levels per octave during training and test.
