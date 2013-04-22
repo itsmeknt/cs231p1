@@ -7,14 +7,11 @@ filt_px_height=model.sbin*model.maxsize(1);
 newPos = pos;
 for i=1:size(pos,2)
     % Existing bounding box and image size
-    x1 = pos(1,i).x1;
-    x2 = pos(1,i).x2;
-    y1 = pos(1,i).y1;
-    y2 = pos(1,i).y2;
-    trueBbox = [x1, y1, x2, y2];
-    bbox_width=pos(1,i).x2-pos(1,i).x1;
-    bbox_height=pos(1,i).y2-pos(1,i).y1;
+    trueBbox = [pos(1,i).x1, pos(1,i).y1, pos(1,i).x2, pos(1,i).y2];
+    bbox_width=trueBbox(3) - trueBbox(1);
+    bbox_height=trueBbox(4) - trueBbox(2);
     image=imread(pos(1,i).im);
+    image = color(image);
     image_size=size(image);
     
     % pad the existing bounding box
@@ -32,6 +29,8 @@ for i=1:size(pos,2)
     clear image;
     
     % Compute Score
+    [feat, pyramidScales] = featpyramid(input, model.sbin, model.interval);
+    [detectionsAboveThreshold, dummy, dummy2] = detect(feat, scale, model);
     [scores,scales,padx_feature,pady_feature]=computeScores(testim,model,false);
     maxScore = -realmax;
     maxBbox = [-1, -1, -1, -1];

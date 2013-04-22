@@ -1,79 +1,69 @@
-function [boxes] = detect(input, model, thresh)
+function [detectionsAboveThreshold, detectionsAtThreshold, detectionsBelowThreshold] = detect(featPyramid, scales, model, threshold)
 
-% boxes = detect(input, model, thresh)
-% Detect objects in input using a model and a score threshold.
-% Higher threshold leads to fewer detections.
+% detects objects in feat pyramid
 %
-% The function returns a matrix with one row per detected object.  The
-% last column of each row gives the score of the detection.  The
-% column before last specifies the component used for the detection.
-% The first 4 columns specify the bounding box for the root filter and
-% subsequent columns specify the bounding boxes of each part.
+% inputs:
+% featPyramid - feature pyramid from featpyramid.m
+% scales - scales of the feature pyramid from featpyramid.m
+% model - model to use for detection
+% threshold - detection threshold, default to -realmax
+% getScoresAbove - boolean value. If true, grabs all bounding box strictly
+% above threshold. If false, grabs all bounding box strictly below
+% threshold.
 %
-% If bbox is not empty, we pick best detection with significant overlap. 
-% If label and fid are included, we write feature vectors to a data file.
+% output:
+% detections = an array of detection structs. detection structs have the
+% following member variables:
+%   .rootBbox - bounding box ([x1, y1, x2, y2]) of root position
+%   .partBbox - a matrix of bounding box where each row represents the bounding
+%               box of a part. So it is a px4 matrix. The index for the
+%               part in this matrix is thes ame as the index in
+%               model.filters.
+%   .score - score of the detection
+%   .component - the component used for the detection
 
+if isempty(threshold)
+    threshold = -realmax;
+end
 
-% NOTE: You'll need to implement the inference for the part filters in this
-% file
-
-% we assume color images
-input = color(input);
-
-% the feature pyramid
-[feat, pyramidScales] = featpyramid(input, model.sbin, model.interval);
-
-% score
-[scores padx pady] = computeScores(feat, model, true);
-
-% find all good bounding boxes
-boxes = [];
-for componentIdx=1:model.numcomponents
-    for pyramidLevelIdx=1:length(pyramidScales)
-        % get all good matches
-        scale = pyramidScales(pyramidLevelIdx);
-        rsize = model.rootfilters{model.components{componentIdx}.rootindex}.size;
+detectionsAbove = [];
+detectionsAt = [];
+detectionsBelow = [];
+for pLevelIdx = 1:length(scales)
+    feat = featPyramid{pLevelIdx};
+    scale = scales(pLevelIdx);
+    for cIdx = 1:model.numcomponents
+        rootSize = model.rootfilters{model.components{cIdx}.rootindex}.size;
         
-        score = scores{componentIdx}{pyramidLevelIdx};
+        % compute score
+        score = feat;
+        padx;
+        pady;
+        
+        % threshold scores
         I = find(score > thresh);
-        [Y, X] = ind2sub(size(score), I);
-        boxesEntry = zeros(length(I), 6);
-        for i = 1:length(I)
-            x = X(i);
-            y = Y(i);
-            b = getBoundingBox(x, y, scale, padx, pady, rsize);
-            boxesEntry(i,:) = [b componentIdx score(I(i))];
-        end
-        boxes = [boxes; boxesEntry];
+        detectionsAbove = [detectionsAbove; formatDetections(score, I, cIdx, scale, padx, pady, rootSize)];
+        I = find(score == thresh);
+        detectionsAt = [detectionsAt; formatDetections(score, I, cIdx, scale, padx, pady, rootSize)];
+        I = find(score < thresh);
+        detectionsBelow = [detectionsBelow; formatDetections(score, I, cIdx, scale, padx, pady, rootSize)];
     end
 end
 end
 
 
-
-
-%{
-old code
-
-[scores scales padx pady] = computeScores(input, model, true);
-boxes = [];
-for componentIdx=1:length(scores)
-    for pyramidLevelIdx=1:length(scores{componentIdx})
-        % get all good matches
-        scale = scales(pyramidLevelIdx);
-        rsize = model.rootfilters{model.components{componentIdx}.rootindex}.size;
-        
-        score = scores{componentIdx}{pyramidLevelIdx};
-        I = find(score > thresh);
-        [Y, X] = ind2sub(size(score), I);
-        boxesEntry = zeros(length(I), 6);
-        for i = 1:length(I)
-            x = X(i);
-            y = Y(i);
-            b = getBoundingBox(x, y, scale, padx, pady, rsize);
-            boxesEntry(i,:) = [b componentIdx score(I(i))];
-        end
-        boxes = [boxes; boxesEntry];
-    end
+function detections = formatDetections(score, I, componentIdx, scale, padx, pady, rootSize)
+detections = [];
+[Y, X] = ind2sub(size(score), I);
+for i = 1:length(I)
+    x = X(i);
+    y = Y(i);
+    rootBbox = getBoundingBox(x, y, scale, padx, pady, rootSize);
+    entry.rootBbox = rootBbox;
+    entry.partBbox = [];
+    entry.score = score(I(i));
+    entry.component = componentIdx;
+    detections = [detections; entry];
 end
-%}
+end
+
