@@ -30,46 +30,35 @@ for i=1:size(pos,2)
     
     % Compute Score
     [feat, pyramidScales] = featpyramid(input, model.sbin, model.interval);
-    [detectionsAboveThreshold, dummy, dummy2] = detect(feat, scale, model);
-    [scores,scales,padx_feature,pady_feature]=computeScores(testim,model,false);
+    detections = detect(feat, scale, model, -realmax);
+    maxDetection = [];
     maxScore = -realmax;
-    maxBbox = [-1, -1, -1, -1];
-    for c=1:model.numcomponents
-        scorePyramid = scores{c};
-        rsize = model.rootfilters{model.components{c}.rootindex}.size;
-        for level=1:length(scorePyramid)
-            score = scorePyramid{level};
-            scale = scales(level);
-            
-            x = -1;
-            y = -1;
-            while true
-                [maxCols, ys] = max(score);
-                [maxVal, xs] = max(maxCols);
-                if (maxVal <= maxScore)
-                    break;
-                end
-                
-                x = xs;
-                y = ys(x);
-                
-                predictedBbox = getBoundingBox(x, y, scale, padx_feature, pady_feature, rsize);
-                overlap = computeOverlap(predictedBbox, trueBbox);
-                if overlap < 0.7
-                    score(y, x) = -realmax;
-                    x = -1;
-                    y = -1;
-                else
-                    maxScore = maxVal;
-                    maxBbox = predictedBbox;
-                    break;
-                end
-            end
+    for j=1:length(detections)
+       detection = detections(j); 
+       if detection.score > maxScore
+           maxDetection = [detection];
+           maxScore = detection.score;
+       elseif detection.score == maxScore
+           maxDetection = [maxDetection; detection];
+       end
+    end
+    
+    % if theres a tie of multiple max score detection, comput best overlap
+    % also remove detections with too little (<70%) overlap
+    bestDetection = [];
+    bestOverlap = -realmax;
+    for j=1:length(maxDetection)
+        detection = maxDetection(j);
+        overlap = computeOverlap(detection.rootBbox, trueBbox);
+        if overlap > .7 & overlap > bestOverlap
+            bestOverlap = overLap;
+            bestDetection = detection;
         end
     end
-    newPos(1, i).x1 = maxBbox(1);
-    newPos(1, i).y1 = maxBbox(2);
-    newPos(1, i).x2 = maxBbox(3);
-    newPos(1, i).y2 = maxBbox(4);
+    
+    newPos(1, i).x1 = bestDetection.rootBbox(1);
+    newPos(1, i).y1 = bestDetection.rootBbox(2);
+    newPos(1, i).x2 = bestDetection.rootBbox(3);
+    newPos(1, i).y2 = bestDetection.rootBbox(4);
 end
 end

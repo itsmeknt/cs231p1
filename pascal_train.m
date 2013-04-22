@@ -21,13 +21,14 @@ end
 ITER = 5;
 DATAMINE_ITER = 5;
 allNeg = neg;
+size = length(neg);
 for iter = 1:ITER
     % latent root position
     pos = relabelpos(pos, model);
     
     for datamineIter = 1:DATAMINE_ITER
         % get new negative data while removing easy ones
-        neg = updateNegCache(allNeg, neg, model);
+        neg = updateNegCache(allNeg, neg, model, size);
         
         % train model
         model = initmodel(pos);

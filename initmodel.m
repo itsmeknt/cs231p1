@@ -92,15 +92,51 @@ model.learnmult(2) = 1;
 model.lowerbounds{2} = -100*ones(model.blocksizes(2),1);
 
 % set up one component model
+model.numcomponents = 1;
 model.components{1}.rootindex = 1;
 model.components{1}.offsetindex = 1;
 model.components{1}.parts = {};
 model.components{1}.dim = 2 + model.blocksizes(1) + model.blocksizes(2);
 model.components{1}.numblocks = 2;
 
+% set up parts and deformations
+% part filter is symmetric
+model.numparts = 6;
+
+rHeight = model.rootfilters{1}.size(1);
+rWidth = model.rootfilters{1}.size(2);
+partArea = 0.8*rHeight*rWidth;
+pWidth = sqrt(partArea*(rWidth/rHeight));
+pHeight = pWidth*(rHeight/rWidth);
+
+blockLabel = 2;
+cumIdx = 0;
+for componentIdx = 1:model.numcomponents
+    for partIdx = 1:model.numparts
+        cumIdx = cumIdx+1;
+        blockLabel = blockLabel+1;
+        model.partfilters{cumIdx}.blockLabel = blockLabel;
+        model.partfilters{cumIdx}.w = zeros(pHeight, pWidth, 31);
+        model.blocksizes(blockLabel) = prod(size(model.partfilters{cumIdx}.w));
+        model.regmult(blockLabel) = 1;
+        model.learnmult(blockLabel) = 1;
+        model.lowerbounds{blockLabel} = -100*ones(model.blocksizes(blockLabel),1);
+        
+        blockLabel = blockLabel+1;
+        model.defs{cumIdx}.blockLabel = blockLabel;
+        model.defs{cumIdx}.w = [0, 0, 1, 1];
+        model.blocksizes(blockLabel) = prod(size(model.defs{cumIdx}.w));
+        model.regmult(blockLabel) = 1;
+        model.learnmult(blockLabel) = 1;
+        model.lowerbounds{blockLabel} = -100*ones(model.blocksizes(blockLabel),1);
+        
+        model.components{componentIdx}.parts{partIdx}.partindex = cumIdx;
+        model.components{componentIdx}.parts{partIdx}.defindex = cumIdx;
+    end
+end
+    
 % initialize the rest of the model structure
 model.interval = 10;
-model.numcomponents = 1;
 model.numblocks = 2;
 model.partfilters = {};
 model.defs = {};

@@ -6,7 +6,7 @@ function [detectionsAboveThreshold, detectionsAtThreshold, detectionsBelowThresh
 % featPyramid - feature pyramid from featpyramid.m
 % scales - scales of the feature pyramid from featpyramid.m
 % model - model to use for detection
-% threshold - detection threshold, default to -realmax
+% threshold - detection threshold
 % getScoresAbove - boolean value. If true, grabs all bounding box strictly
 % above threshold. If false, grabs all bounding box strictly below
 % threshold.
@@ -21,10 +21,6 @@ function [detectionsAboveThreshold, detectionsAtThreshold, detectionsBelowThresh
 %               model.filters.
 %   .score - score of the detection
 %   .component - the component used for the detection
-
-if isempty(threshold)
-    threshold = -realmax;
-end
 
 detectionsAbove = [];
 detectionsAt = [];
