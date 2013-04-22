@@ -29,6 +29,8 @@ rootfilters = cell(length(model.rootfilters), 1);
 for i = 1:length(model.rootfilters)
   rootfilters{i} = model.rootfilters{i}.w;
 end
+interval = model.interval;
+numPartFilters = length(model.partfilters)/model.numcomponents;
 
 % cache some data
 ridx = cell(model.numcomponents, 1);
@@ -63,10 +65,12 @@ for level = interval+1:length(featPyramid)
   % convolve feature maps with filters 
   featr = padarray(featPyramid{level}, [pady padx 0], 0);
   rootmatch = fconv(featr, rootfilters, 1, length(rootfilters));
- 
+  
+  % compute part scores
+  [Positions, MaxScores]=latPosAndScores(model,featPyramid,num_parts,level-interval,useDeformationCost)
   for c = 1:model.numcomponents
     % root score + offset
-    scoreEntry = rootmatch{ridx{c}} + model.offsets{oidx{c}}.w;  
+    scoreEntry = rootmatch{ridx{c}} + model.offsets{oidx{c}}.w;
     scores{c}{levelIdx} = scoreEntry;
   end
   scales(levelIdx) = scale;

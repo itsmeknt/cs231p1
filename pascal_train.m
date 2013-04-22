@@ -18,25 +18,23 @@ end
 % PUT YOUR CODE HERE
 % TODO: Train the rest of the DPM (latent root position, part filters, ...)
 
-[fPyramids uids scale] = getPyramidFeats(model, cls);
-fPos = pos;
-fNeg = neg;
+ITER = 5;
+DATAMINE_ITER = 5;
+allNeg = neg;
 for iter = 1:ITER
     % latent root position
-    fPos = relabelpos(fPos, model);
+    pos = relabelpos(pos, model);
     
     for datamineIter = 1:DATAMINE_ITER
-        % get new negative data
+        % get new negative data while removing easy ones
+        neg = updateNegCache(allNeg, neg, model);
         
-        
-        % part initialization
-        model = initmodel(fPos);
-        model = train(cls, model, fPos, neg);                       % root filter training
+        % train model
+        model = initmodel(pos);
+        model = train(cls, model, nos, neg);                       % root filter training
         model = initPartFilter(model, 6);                             %
                                                                       % compute part pos
-        model = trainPartFilters(model, fPos, neg);                 % part filter + deformation cost traiing
-        
-        % remove negatives
+        model = trainPartFilters(model, pos, neg);                 % part filter + deformation cost traiing
     end
 end
 save([cachedir cls '_random'], 'model');

@@ -3,7 +3,7 @@ function model = train(name, model, pos, neg )
 % model = train(name, model, pos, neg)
 % Train LSVM. (For now it's just an SVM)
 % 
-
+  
 % SVM learning parameters
 C = 0.002*model.numcomponents;
 J = 1;

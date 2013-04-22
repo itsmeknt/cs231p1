@@ -30,27 +30,9 @@ bytelimit = 3*2^30;
 
 negpos = 0;     % last position in data mining
 
-if ~cont
-  % The feature vector cache will use a memory pool
-  % that can hold max_num feature vectors, each with
-  % a maximum byte size of single_byte_size*max_dim
-  [max_dim, max_nbls] = max_fv_dim(model);
-  max_num = ceil(bytelimit / (conf.single_byte_size*max_dim));
-  fv_cache('init', max_num, max_dim, max_nbls);
-end
-
-[blocks, lb, rm, lm, cmps] = fv_model_args(model);
-fv_cache('set_model', blocks, lb, rm, lm, cmps, C, true);
-
 datamine = true;
 pos_loss = zeros(iter,2);
 for t = 1:iter
-  fprintf('%s iter: %d/%d\n', procid(), t, iter);
-  fv_cache('ex_prepare');
-  info = info_to_struct(fv_cache('info'));
-  fv_cache('ex_free');
-  [num_entries, num_examples] = info_stats(info);
-  
   if ~cont || t > 1
     % compute hinge loss on foreground examples before relabeling
     if warp == 0
@@ -70,16 +52,11 @@ for t = 1:iter
     % This rule saves only those feature vectors that participate
     % in data-mining
     I = sort(find(info.is_mined == 1));
-    fprintf('saving %d/%d cache entries\n', length(I), num_entries);
-    fv_cache('shrink', int32(I));
-    % update entry and example counts
-    [num_entries, num_examples] = info_stats(info, I);
 
     % add new positives
     stop_relabeling = false;
     if warp
-      [num_entries_added, num_examples_added] ...
-          = poswarp(t, model, pos);
+      [num_entries_added, num_examples_added] = poswarp(t, model, pos);
       fusage = num_examples_added;
       component_usage = num_examples_added;
     else

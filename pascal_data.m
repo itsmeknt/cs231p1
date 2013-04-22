@@ -2,6 +2,21 @@ function [pos, neg] = pascal_data(cls)
 
 % [pos, neg] = pascal_data(cls)
 % Get training data from the PASCAL dataset.
+%
+% input:
+% cls - class name
+%
+% output:
+% pos = an array of data structs of all positive examples in train and val
+% neg = an array of data structs of all negative examples in train
+%
+% data is a struct with the following member variables:
+%   .im - image file path
+%   .id - data instance id
+%   .x1 - optional, if there is a bounding box
+%   .x2 - optional, if there is a bounding box
+%   .y1 - optional, if there is a bounding box
+%   .y2 - optional, if there is a bounding box
 
 globals; 
 pascal_init;
@@ -30,6 +45,7 @@ catch
       pos(numpos).y1 = bbox(2);
       pos(numpos).x2 = bbox(3);
       pos(numpos).y2 = bbox(4);
+      pos(numpos).id = ids(i);
     end
   end
 
@@ -46,6 +62,7 @@ catch
     if length(clsinds) == 0
       numneg = numneg+1;
       neg(numneg).im = [VOCopts.datadir rec.imgname];
+      neg(numneg).id = ids(i);
     end
   end
   
