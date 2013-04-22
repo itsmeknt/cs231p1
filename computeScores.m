@@ -1,14 +1,12 @@
-function [scores, scales, padx, pady] = computeScores(input, model, addDeformationCost)
+function [scores, padx, pady] = computeScores(featPyramid, model, addDeformationCost)
 
 % Computes scores of each block of the image at each pyramid level.
 %
 % Returns scores, which is a cell array with model.numcomponents number of
 % cells.
 %
-% scores{component} is a cell array with model.interval number of cells.
-% scores{component, 1} gives the scores at the feature pyramid level at the original
-% resolution,  and scores{component, interval} give the scores at the feature
-% pyramid level at (1/2^{(interval-1)/interval}) resolution.
+% scores{component} is a cell array with 2*model.interval number of cells.
+% Each cell is a pyramid level.
 %
 % scores{component}{pyramidLevel} = mxn matrix where m = number of blocks
 % along x axis and n = number of blocks along y axis for the given pyramid
@@ -25,9 +23,6 @@ function [scores, scales, padx, pady] = computeScores(input, model, addDeformati
 %
 % NOTE: You'll need to implement the inference for the part filters in this
 % file
-
-% we assume color images
-input = color(input);
 
 % prepare model for convolutions
 rootfilters = cell(length(model.rootfilters), 1);
@@ -49,28 +44,24 @@ end
 padx = ceil(model.maxsize(2)/2+1);
 pady = ceil(model.maxsize(1)/2+1);
 
-% the feature pyramid
-interval = model.interval;
-[feat, pyramidScales] = featpyramid(input, model.sbin, interval);
-
 % initialize return variables
 levelIdx = 1;
 scores = cell(model.numcomponents, 1);
 for i = 1:model.numcomponents
-    scores{1} = cell(length(feat)-interval, 1);
+    scores{1} = cell(length(featPyramid)-interval, 1);
 end
-scales = zeros(length(feat)-interval, 1);
+scales = zeros(length(featPyramid)-interval, 1);
 
 % compute score at each scale
-for level = interval+1:length(feat)
-  scale = model.sbin/pyramidScales(level);    
-  if size(feat{level}, 1)+2*pady < model.maxsize(1) || ...
-     size(feat{level}, 2)+2*padx < model.maxsize(2)
+for level = interval+1:length(featPyramid)
+  scale = model.sbin/scalePyramid(level);    
+  if size(featPyramid{level}, 1)+2*pady < model.maxsize(1) || ...
+     size(featPyramid{level}, 2)+2*padx < model.maxsize(2)
     continue;
   end
     
   % convolve feature maps with filters 
-  featr = padarray(feat{level}, [pady padx 0], 0);
+  featr = padarray(featPyramid{level}, [pady padx 0], 0);
   rootmatch = fconv(featr, rootfilters, 1, length(rootfilters));
  
   for c = 1:model.numcomponents
