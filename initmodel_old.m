@@ -1,4 +1,4 @@
-function model = initmodel(pos,varargin)
+function model = initmodel(pos, sbin, size)
 
 % model = initmodel(pos, sbin, size)
 % Initialize model structure.
@@ -91,55 +91,18 @@ model.regmult(2) = 1;
 model.learnmult(2) = 1;
 model.lowerbounds{2} = -100*ones(model.blocksizes(2),1);
 
-% set up parts and deformations
-% part filter is symmetric
-model.numparts = 6;
-numcomponents = 1;
-rHeight = model.rootfilters{1}.size(1);
-rWidth = model.rootfilters{1}.size(2);
-partArea = 0.8*rHeight*rWidth;
-pWidth = ceil(sqrt(partArea*(rWidth/rHeight)));
-pHeight = ceil(pWidth*(rHeight/rWidth));
-
-blockLabel = 2;
-cumIdx = 0;
-for componentIdx = 1:numcomponents
-    for partIdx = 1:model.numparts
-        cumIdx = cumIdx+1;
-        blockLabel = blockLabel+1;
-        model.partfilters{cumIdx}.blockLabel = blockLabel;
-        model.partfilters{cumIdx}.w = zeros(pHeight, pWidth, 31);
-        model.blocksizes(blockLabel) = prod(size(model.partfilters{cumIdx}.w));
-        model.regmult(blockLabel) = 1;
-        model.learnmult(blockLabel) = 1;
-        model.lowerbounds{blockLabel} = -100*ones(model.blocksizes(blockLabel),1);
-        
-        blockLabel = blockLabel+1;
-        model.defs{cumIdx}.blockLabel = blockLabel;
-        model.defs{cumIdx}.w = [0, 0, 1, 1];
-        model.blocksizes(blockLabel) = prod(size(model.defs{cumIdx}.w));
-        model.regmult(blockLabel) = 1;
-        model.learnmult(blockLabel) = 1;
-        model.lowerbounds{blockLabel} = [-100, -100, 0, 0];
-        
-        model.components{componentIdx}.parts{partIdx}.partindex = cumIdx;
-        model.components{componentIdx}.parts{partIdx}.partidx = cumIdx;
-        model.components{componentIdx}.parts{partIdx}.defindex = cumIdx;
-        model.components{componentIdx}.parts{partIdx}.defidx = cumIdx;
-    end
-end
-    
 % set up one component model
-model.numcomponents = numcomponents;
 model.components{1}.rootindex = 1;
-model.components{1}.rootidx = 1;
 model.components{1}.offsetindex = 1;
-model.components{1}.offsetidx = 1;
-model.components{1}.dim = 14 + sum(model.blocksizes);
+model.components{1}.parts = {};
+model.components{1}.dim = 2 + model.blocksizes(1) + model.blocksizes(2);
 model.components{1}.numblocks = 2;
 
 % initialize the rest of the model structure
 model.interval = 10;
-model.numblocks = 14;
+model.numcomponents = 1;
+model.numblocks = 2;
+model.partfilters = {};
+model.defs = {};
 model.maxsize = model.rootfilters{1}.size;
 model.minsize = model.rootfilters{1}.size;

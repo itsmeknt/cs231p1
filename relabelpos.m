@@ -10,9 +10,6 @@ for i=1:size(pos,2)
     trueBbox = [pos(1,i).x1, pos(1,i).y1, pos(1,i).x2, pos(1,i).y2];
     bbox_width=trueBbox(3) - trueBbox(1);
     bbox_height=trueBbox(4) - trueBbox(2);
-    image=imread(pos(1,i).im);
-    image = color(image);
-    image_size=size(image);
     
     % pad the existing bounding box
     padx=ceil(0.3*min(bbox_width,filt_px_width));
@@ -25,6 +22,9 @@ for i=1:size(pos,2)
     new_y2=min(image_size(1),pos(1,i).y2+pady);
     
     % Construct the padded image and clear the original image
+    image=imread(pos(1,i).im);
+    image = color(image);
+    image_size=size(image);
     testim=image(new_y1:new_y2,new_x1:new_x2,:);
     clear image;
     

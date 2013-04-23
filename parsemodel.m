@@ -5,6 +5,9 @@ function model = parsemodel(model, blocks)
 
 % update root filters
 for i = 1:length(model.rootfilters)
+    if model.rootfilters{i}.blocklabel > length(blocks)
+        continue;
+    end
   s = size(model.rootfilters{i}.w);
   width1 = ceil(s(2)/2);
   width2 = floor(s(2)/2);
@@ -16,6 +19,9 @@ end
 
 % update offsets
 for i = 1:length(model.offsets)
+    if model.offsets{i}.blocklabel > length(blocks)
+        continue;
+    end
   model.offsets{i}.w = blocks{model.offsets{i}.blocklabel};
 end
 
@@ -25,6 +31,10 @@ for i = 1:length(model.partfilters)
     continue;
   end
 
+    if model.defs{i}.blocklabel > length(blocks)
+        continue;
+    end
+    
   model.defs{i}.w = reshape(blocks{model.defs{i}.blocklabel}, ...
                             size(model.defs{i}.w));
   partner = model.partfilters{i}.partner;

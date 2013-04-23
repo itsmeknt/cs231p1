@@ -21,7 +21,7 @@ function [component,rootLoc,partLoc,level,maxScore,Array]=latent(model,features,
 %        k and position (x,y) in the feature pyramid for the component i.
 
 maxScore=-Inf;
-ScoreArray=Cell(model.numcomponents,size(features));
+ScoreArray=cell(model.numcomponents,size(features));
 for i=1:model.numcomponents
     
     % Get Model Rootfilter

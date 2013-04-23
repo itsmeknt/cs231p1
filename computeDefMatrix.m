@@ -8,7 +8,7 @@ deform=zeros(2*rootSize);
 
 % Get the deformation weights and the anchor position of the part
 
-v=2*partDef.anchor; % Multiply canonical coordinates by 2 for double resolution for part filters
+v=partDef.anchor; % Multiply canonical coordinates by 2 for double resolution for part filters
 w=partDef.w;
 
 % Initalize displacements

@@ -1,4 +1,4 @@
-function [detectionsAboveThreshold, detectionsAtThreshold, detectionsBelowThreshold] = detect(featPyramid, scales, model, threshold)
+function [detectionsAboveThreshold, detectionsAtThreshold, detectionsBelowThreshold bestRootLoc bestPartLoc bestRootLevel bestComponentIdx bestScore] = detect(featPyramid, scales, model, threshold)
 
 % detects objects in feat pyramid
 %
@@ -25,16 +25,16 @@ function [detectionsAboveThreshold, detectionsAtThreshold, detectionsBelowThresh
 detectionsAbove = [];
 detectionsAt = [];
 detectionsBelow = [];
+% compute score
+[component,bestRootLoc,bestPartLoc,bestRootLevel,bestScore,Array]=latent(model,featPyramid,scales);
 for pLevelIdx = 1:length(scales)
-    feat = featPyramid{pLevelIdx};
     scale = scales(pLevelIdx);
     for cIdx = 1:model.numcomponents
         rootSize = model.rootfilters{model.components{cIdx}.rootindex}.size;
         
-        % compute score
-        score = feat;
-        padx;
-        pady;
+        score = Array{cIdx, pLeveLIdx};
+        padx = 0;
+        pady = 0;
         
         % threshold scores
         I = find(score > thresh);

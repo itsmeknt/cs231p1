@@ -17,6 +17,10 @@ function [pos, neg] = pascal_data(cls)
 %   .x2 - optional, if there is a bounding box
 %   .y1 - optional, if there is a bounding box
 %   .y2 - optional, if there is a bounding box
+%   .bestRootLoc
+%   .bestPartLoc
+%   .bestRootScale
+%   .bestComponentIdx
 
 globals; 
 pascal_init;
@@ -45,7 +49,12 @@ catch
       pos(numpos).y1 = bbox(2);
       pos(numpos).x2 = bbox(3);
       pos(numpos).y2 = bbox(4);
-      pos(numpos).id = ids(i);
+      id = ids{i};
+      if iscell(id)
+          id = id{1};
+      end
+      pos(numpos).id = id;
+      pos(numpos).partBbox = [];
     end
   end
 
@@ -68,3 +77,4 @@ catch
   
   save([cachedir cls '_train'], 'pos', 'neg');
 end  
+end

@@ -3,12 +3,13 @@ function model = train(name, model, pos, neg )
 % model = train(name, model, pos, neg)
 % Train LSVM. (For now it's just an SVM)
 % 
-  
+
 % SVM learning parameters
 C = 0.002*model.numcomponents;
 J = 1;
 
 maxsize = 2^28;
+
 globals;
 hdrfile = [tmpdir name '.hdr'];
 datfile = [tmpdir name '.dat'];
@@ -28,8 +29,8 @@ maxnum = floor(maxsize / (dim * 4));
 
 % Reset some of the tempoaray files, just in case
 % reset data file
-fid = fopen(datfile, 'wb');
-fclose(fid);
+%fid = fopen(datfile, 'wb');
+%fclose(fid);
 % reset header file
 writeheader(hdrfile, 0, labelsize, model);  
 % reset info file
@@ -44,15 +45,15 @@ writelob(lobfile, model)
 
 
 % Find the positive examples and safe them in the data file
-fid = fopen(datfile, 'w');
-num = serializeFeatureToFile(pos, model, 0, fid, true); 
-% num = poswarp(name, model, 1, pos, fid);
+%fid = fopen(datfile, 'w');
+%num = poswarp(name, model, 1, pos, fid);
 
 % Add random negatives
-num = num+serializeFeatureToFile(neg, model, length(pos), fid, false); 
-% num = num + negrandom(name, model, 1, neg, maxnum-num, fid);
-fclose(fid);
-        
+%num = num + negrandom(name, model, 1, neg, maxnum-num, fid);
+%fclose(fid);
+
+num =  79793;
+
 % learn model
 writeheader(hdrfile, num, labelsize, model);
 % reset initial model 
@@ -61,7 +62,8 @@ fwrite(fid, zeros(sum(model.blocksizes), 1), 'double');
 fclose(fid);
 
 % Call the SVM learning code
-cmd = sprintf('./learn %.4f %.4f %s %s %s %s %s', ...
+
+ cmd = sprintf('./learn %.4f %.4f %s %s %s %s %s', ...
               C, J, hdrfile, datfile, modfile, inffile, lobfile);
 fprintf('executing: %s\n', cmd);
 status = unix(cmd);
@@ -69,6 +71,7 @@ if status ~= 0
   fprintf('command `%s` failed\n', cmd);
   keyboard;
 end
+
     
 fprintf('parsing model\n');
 blocks = readmodel(modfile, model);
@@ -82,80 +85,7 @@ model.thresh = pos_vals(ceil(length(pos_vals)*0.05));
 
 % cache model
 save([cachedir name '_model'], 'model');
-end
 
-function num = serializeFeatureToFile(posOrNeg, model, baseFeatureId, fid, isPos)
-for i=1:length(posOrNegVector)
-    [feat scale] = loadFeaturePyramidCache(posOrNeg(i).id);
-    if (isPos)
-        [dummy, ambiguous, negHard bestRootLoc bestPartLoc bestRootLevel bestComponentIdx] = detect(feat, scale, model, 1, false);
-        
-        posOrNeg(i).bestRootLoc = bestRootLoc;
-        posOrNeg(i).bestPartLoc = bestPartLoc;
-        posOrNeg(i).bestRootLevel = bestRootLevel;
-        posOrNeg(i).bestComponentIdx = bestComponentIdx;
-    end
-    
-    % root filter features
-    l = posOrNeg(i).bestRootLevel;
-    rloc = posOrNeg(i).bestRootLoc;
-    c = posOrNeg(i).bestComponentIdx;
-    rsize = model.rootfilters{model.components{c}.rootidx}.size;
-    rootFeat = symmetrizeFeature(feat{l}(rloc(1):rloc(1)+rsize(1)-1, rloc(2):rloc(2)+rsize(2)-1), rsize);
-    
-    % part filter features
-    ploc = posOrNeg(i).bestPartLoc;
-    defFeat = cell(model.numparst, 1);
-    partFeat = cell(model.numparst, 1);
-    for j = 1:model.numparts
-        pDef = ploc{j}';
-        psize = size(model.partfilters{model.components{c}.parts{j}.partidx}.w);
-        
-        defFeat{j} = [pDef(2) pDef(1) pDef(2)*pDef(2) pDef(1)*pDef(1)];
-        ploc = pDef + 2*rloc + model.defs{model.components{c}.parts{j}.defidx}.anchor;
-        partFeat{j} = symmetrizeFeature(feat{l-model.interval}(ploc(1):rloc(1)+psize(1)-1, ploc(2):ploc(2)+psize(2)-1), psize);
-    end
-    
-    if pos
-        classVal = 1;
-        serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+2*i-1, fid);
-        serializeFeature(fliplr(rootFeat), fliplr(partFeat), fliplr(defFeat), model, c, classVal, baseFeatureId+2*i, fid);
-    else
-        classVal = -1;
-        serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+i, fid);
-    end
-end
-end
-
-function feat = symmetrizeFeature(feat, filterSize)
-width1 = ceil(filterSize(2)/2);
-width2 = floor(filterSize(2)/2);
-feat(:,1:width2,:) = feat(:,1:width2,:) + flipfeat(feat(:,width1+1:end,:));
-feat = feat(:,1:width1,:);
-end
-
-function fid = serializeFeature(rootFeat, partFeats, deformFeats, model, componentIdx, classVal, featureId, fid)
-ridx = model.components{c}.rootindex;
-oidx = model.components{c}.offsetindex;
-rblocklabel = model.rootfilters{ridx}.blocklabel;
-oblocklabel = model.offsets{oidx}.blocklabel;
-
-fwrite(fid, [classVal featureId 0 0 0 2 dim], 'int32');
-fwrite(fid, oblocklabel, 'single');
-fwrite(fid, 1, 'single');
-fwrite(fid, rblocklabel, 'single');
-fwrite(fid, rootFeat, 'single');
-for i=1:model.numparts
-    pidx = model.components{componentIdx}.partIdx;
-    pblocklabel = model.partfilters{pidx}.blocklabel;
-    fwrite(fid, pblocklabel, 'single');
-    fwrite(fid, partFeats{i}, 'single');
-    didx = model.components{componentIdx}.defIdx;
-    dblocklabel = model.defs{didx}.blocklabel;
-    fwrite(fid, dblocklabel, 'single');
-    fwrite(fid, deformFeats{i}, 'single');
-end
-end
 
 % get positive examples by warping positive bounding boxes
 % we create virtual examples by flipping each image left to right
@@ -200,7 +130,6 @@ for i = 1:numpos
     fwrite(fid, feat, 'single');
     num = num+2;    
 end
-end
 
 % get random negative examples
 function num = negrandom(name, model, c, neg, maxnum, fid)
@@ -236,4 +165,4 @@ for i = 1:numneg
     num = num+rndneg;
   end
 end
-end
+
