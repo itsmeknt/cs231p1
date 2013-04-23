@@ -8,7 +8,7 @@ function [bbox] = getBoundingBox(x, y, scale, padx, pady, rsize)
 % scale = the resolution scale of the pyramid level
 % padx = size of padding along x axis
 % pady = size of padding along y axis
-% rsize = root filter size of the component of the model used to do
+% rsize = 2x1 vector of root filter size of the component of the model used to do
 % the convolution on the pyramid level
 %
 % returns the original pixel coordinate bounding box

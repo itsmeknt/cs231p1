@@ -81,7 +81,35 @@ model.thresh = pos_vals(ceil(length(pos_vals)*0.05));
 
 % cache model
 save([cachedir name '_model'], 'model');
+end
 
+function num = serializeTrainingInstanceToFile(posOrNegVector, model, fid)
+for i=1:length(posOrNegVector)
+    bbox = [posOrNegVector(i).x1 posOrNegVector(i).y1 posOrNegVector(i).x2 posOrNegVector(i).y2];
+    % skip small examples
+    if (bbox(3)-bbox(1)+1)*(bbox(4)-bbox(2)+1) < minsize
+        continue
+    end
+    imgs = [];
+    for j=1:length(posOrNegVector)
+        im = color(imread(posOrNegVector(j).im));
+        imgs = [imgs; im];
+    end
+    [feat scale] = featpyramid(im, model.sbin, model.interval);
+    [dummy1, dumm2, dummy3, pLevel, dummy4, dummy5] = latent(model, feat, scale);
+    
+end
+end
+
+function feat = serializeFeature(feat, model, componentIdx)
+    componentInfo = model.component{componentIdx};
+    partWeighSize = 0;
+    for i=1:model.numparts
+        partWeightSize = partWeightSize + numel(model.partfilters{componentInfo.parts{i}.partidx});
+    end
+    feat = zeros(1+numel(model.rootfilters{componentInfo.rootidx}));
+    feat(model.offsets{componentInfo.
+end
 
 % get positive examples by warping positive bounding boxes
 % we create virtual examples by flipping each image left to right
@@ -126,6 +154,7 @@ for i = 1:numpos
     fwrite(fid, feat, 'single');
     num = num+2;    
 end
+end
 
 % get random negative examples
 function num = negrandom(name, model, c, neg, maxnum, fid)
@@ -160,4 +189,5 @@ for i = 1:numneg
     end
     num = num+rndneg;
   end
+end
 end

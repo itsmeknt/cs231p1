@@ -1,18 +1,21 @@
 function [ model ] = initPartFilter( model, numParts )
 cumIdx = 1;
 for componentIdx=1:model.numcomponents
-    energyMatrix = flattenByNorming(model.rootfilters{model.components{componentIdx}.rootindex}.w);
-    
-
+    energyMatrix = imresize(flattenByNorming(model.rootfilters{model.components{componentIdx}.rootindex}.w), 2, 'bicubic');
     for partIdx=1:numParts
         bbox = selectTopEnergyRegion(energyMatrix,width,heigth);
+        symBbox = getSymmetricBbox(energyMatrix, bbox);
+        
+        if ~isempty(symBbox) && partIdx+1 > numParts
+            break;
+        end
+            
         
         energyMatrix = zeroOutEnergyRegion(energyMatrix, bbox);
         model = updateModelParameters(model, bbox, partIdx, componentIdx, cumIdx);
         cumIdx = cumIdx+1;
         
-        symBbox = getSymmetricBbox(energyMatrix, bbox);
-        if ~isempty(symBbox) && partIdx < numParts && computeOverlap(bbox, symBbox) < 0.5
+        if ~isempty(symBbox)
             partIdx = partIdx+1;                                                            % we're adding a new, symmetric part
             
             energyMatrix = zeroOutEnergyRegion(energyMatrix, symBbox);
@@ -22,7 +25,6 @@ for componentIdx=1:model.numcomponents
     end
 end
 end
-
 
 function [model] = updateModelParameters(model, partBbox, partIdx, componentIdx)
 pIdx = model.components{componentIdx}.parts{partIdx}.partidx;
