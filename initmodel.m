@@ -16,6 +16,8 @@ function model = initmodel(pos,varargin)
 % model.learnmult
 % model.maxsize
 % model.minsize
+% model.padx
+% model.pady
 % model.rootfilters{i}
 %   .size
 %   .w
@@ -141,5 +143,57 @@ model.components{1}.numblocks = 2;
 % initialize the rest of the model structure
 model.interval = 10;
 model.numblocks = 14;
-model.maxsize = model.rootfilters{1}.size;
-model.minsize = model.rootfilters{1}.size;
+model.maxsize = [-realmax, -realmax];
+for i=1:length(model.rootfilters)
+    fsize = model.rootfilters{i}.size;
+    if (fsize(1) > model.maxsize(1))
+        model.maxsize(1) = fsize(1);
+    end
+    if (fsize(2) > model.maxsize(2))
+        model.maxsize(2) = fsize(2);
+    end
+end
+for i=1:length(model.partfilters)
+    fsize = size(model.partfilters{i}.w);
+    if (fsize(1) > model.maxsize(1))
+        model.maxsize(1) = fsize(1);
+    end
+    if (fsize(2) > model.maxsize(2))
+        model.maxsize(2) = fsize(2);
+    end
+end
+if model.maxsize(1) == -realmax
+    model.maxsize(1) = 0;
+end
+if model.maxsize(2) == -realmax
+    model.maxsize(2) = 0;
+end
+model.minsize = [realmax, realmax];
+for i=1:length(model.rootfilters)
+    fsize = model.rootfilters{i}.size;
+    if (fsize(1) < model.minsize(1))
+        model.minsize(1) = fsize(1);
+    end
+    if (fsize(2) < model.minsize(2))
+        model.minsize(2) = fsize(2);
+    end
+end
+for i=1:length(model.partfilters)
+    fsize = size(model.partfilters{i}.w);
+    if (fsize(1) < model.minsize(1))
+        model.minsize(1) = fsize(1);
+    end
+    if (fsize(2) < model.minsize(2))
+        model.minsize(2) = fsize(2);
+    end
+end
+if model.minsize(1) == realmax
+    model.minsize(1) = 0;
+end
+
+if model.minsize(2) == realmax
+    model.minsize(2) = 0;
+end
+
+model.padx = ceil(model.maxsize(2)/2+1);
+model.pady = ceil(model.maxsize(1)/2+1);

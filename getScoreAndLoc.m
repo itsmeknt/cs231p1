@@ -1,4 +1,4 @@
-[partScore,partLocation]=getScoreAndLoc(convolved,x,y,deform,rootSize);
+function [partScore,partLocation]=getScoreAndLoc(convolved,x,y,deform,rootSize)
 
 % This function computes the best location of a single part, and net score
 % (Fi*Phi - deformation) given the location (x, y) of the root, the 

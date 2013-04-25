@@ -22,27 +22,26 @@ function [detectionsAboveThreshold, detectionsAtThreshold, detectionsBelowThresh
 %   .score - score of the detection
 %   .component - the component used for the detection
 
-detectionsAbove = [];
-detectionsAt = [];
-detectionsBelow = [];
+detectionsAboveThreshold = [];
+detectionsAtThreshold = [];
+detectionsBelowThreshold = [];
 % compute score
-[component,bestRootLoc,bestPartLoc,bestRootLevel,bestScore,Array]=latent(model,featPyramid,scales);
+[bestComponentIdx,bestRootLoc,bestPartLoc,bestRootLevel,bestScore,Array]=latent(model,featPyramid,scales);
+
 for pLevelIdx = 1:length(scales)
     scale = scales(pLevelIdx);
     for cIdx = 1:model.numcomponents
         rootSize = model.rootfilters{model.components{cIdx}.rootindex}.size;
         
-        score = Array{cIdx, pLeveLIdx};
-        padx = 0;
-        pady = 0;
-        
+        score = Array{cIdx, pLevelIdx};
+       
         % threshold scores
-        I = find(score > thresh);
-        detectionsAbove = [detectionsAbove; formatDetections(score, I, cIdx, scale, padx, pady, rootSize)];
-        I = find(score == thresh);
-        detectionsAt = [detectionsAt; formatDetections(score, I, cIdx, scale, padx, pady, rootSize)];
-        I = find(score < thresh);
-        detectionsBelow = [detectionsBelow; formatDetections(score, I, cIdx, scale, padx, pady, rootSize)];
+        Iabove = find(score > threshold);
+        detectionsAboveThreshold = [detectionsAboveThreshold; formatDetections(score, Iabove, cIdx, scale, model.padx, model.pady, rootSize)];
+        Iat = find(score == threshold);
+        detectionsAtThreshold = [detectionsAtThreshold; formatDetections(score, Iat, cIdx, scale, model.padx, model.pady, rootSize)];
+        Ibelow = ~(Iabove | Iat);
+        detectionsBelowThreshold = [detectionsBelowThreshold; formatDetections(score, Ibelow, cIdx, scale, model.padx, model.pady, rootSize)];
     end
 end
 end

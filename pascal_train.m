@@ -22,19 +22,25 @@ end
 
 model = initmodel(pos);
 model = initPartFilter(model, 6);
-ITER = 5;
-DATAMINE_ITER = 5;
+ITER = 2;
+DATAMINE_ITER = 2;
 neg = allNeg;
 for iter = 1:ITER
+    iter
     % latent root position
    %  pos = relabelpos(pos, model);
     
     for datamineIter = 1:DATAMINE_ITER
+        datamineIter
         % get new negative data while removing easy ones
+        updateNegCacheTic = tic;
         neg = updateNegCache(allNeg, neg, model, length(allNeg));
-        
+        updateNegCacheTime = toc(updateNegCacheTic)
         % train model
+        
+        trainTic = tic;
         model = train(cls, model, pos, neg);                       % root filter training
+        trainTime = toc(trainTic)
     end
 end
 save([cachedir cls '_random'], 'model');

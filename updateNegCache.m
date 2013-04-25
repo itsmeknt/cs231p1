@@ -6,8 +6,15 @@ for i=1:length(allNeg)
     if length(neg) > sizeLimit
         break;
     end
+    
+    a = tic;
     [feat scale] = loadFeaturePyramidCache(allNeg(i).id);
+    cacheTime = toc(a)
+    
+    detectTic = tic;
     [dummy, ambiguous, negHard bestRootLoc bestPartLoc bestRootLevel bestComponentIdx bestScore] = detect(feat, scale, model, 1);
+    detectTime = toc(detectTic)
+    
     if bestScore < 1
         continue;
     end

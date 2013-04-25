@@ -20,6 +20,7 @@ function [component,rootLoc,partLoc,level,maxScore,ScoreMatrix]=latent(model,fea
 %        Array{1,k}[x,y] gives the score of placing the root filter at level
 %        k and position (x,y) in the feature pyramid for the component i.
 
+maxScore=-Inf;
 ScoreMatrix=cell(model.numcomponents,length(features));
 
 % Find the original scale and last scale indices
@@ -52,7 +53,8 @@ for k=1:length(scales)
 end
 
 % parallelize
-for i=1:model.numcomponents
+matlabpool open feature('numcores');
+parfor i=1:model.numcomponents
     rootindex = model.components{i}.rootindex;
     rootsize = model.rootfilters{rootindex}.size;
     
@@ -66,7 +68,6 @@ for i=1:model.numcomponents
     end 
     
     % Compute the score for each location of the root
-    %matlabpool open feature('numcores');
     for k=orig_scale:last_scale
         rootScoreMatrix = conv_roots{k, model.components{i}.rootindex};
         if size(rootScoreMatrix,1)-2*model.pady <= 0 || size(rootScoreMatrix,2)-2*model.padx <= 0

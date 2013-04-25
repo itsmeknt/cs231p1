@@ -34,7 +34,7 @@ end
 
 function [model] = updateModelParameters(model, partBbox, partIdx, componentIdx)
 pIdx = model.components{componentIdx}.parts{partIdx}.partidx;
-energyMatrix = imresize(flattenByNorming(model.rootfilters{model.components{componentIdx}.rootindex}.w), 2, 'bicubic');
+energyMatrix = imresize(model.rootfilters{model.components{componentIdx}.rootindex}.w, 2, 'bicubic');
 model.partfilters{pIdx}.w = energyMatrix(partBbox(1):partBbox(3), partBbox(2):partBbox(4), :);
 
 dIdx = model.components{componentIdx}.parts{partIdx}.defidx;

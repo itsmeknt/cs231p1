@@ -11,16 +11,20 @@ deform=zeros(2*rootSize);
 v=partDef.anchor; % Multiply canonical coordinates by 2 for double resolution for part filters
 w=partDef.w;
 
+
 % Initalize displacements
-dy=abs(1:2*rootSize(1)-v(1));
-dx=abs(1:2*rootSize(2)-v(2));
+y_range=1:2*rootSize(1);
+x_range=1:2*rootSize(2);
+dy=abs(y_range-v(1)*ones(1,2*rootSize(1)));
+dx=abs(x_range-v(2)*ones(1,2*rootSize(2)));
 dy_sq=dy.^2;
 dx_sq=dx.^2;
 
-d=[dy dx dy_sq dx_sq];
+
 
 for i=1:2*rootSize(1)
     for j=1:2*rootSize(2)
-        deform(i,j)=w.*d;
+        d=[dy(1,i); dx(1,j); dy_sq(1,i); dx_sq(1,j)];
+        deform(i,j)=sum(w*d);
     end
 end
