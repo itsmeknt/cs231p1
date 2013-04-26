@@ -25,4 +25,3 @@ switch VOCyear
   case '2008'
     VOCdevkit2008=true;
 end
-

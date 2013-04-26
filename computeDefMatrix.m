@@ -15,8 +15,8 @@ w=partDef.w;
 % Initalize displacements
 y_range=1:2*rootSize(1);
 x_range=1:2*rootSize(2);
-dy=abs(y_range-v(1)*ones(1,2*rootSize(1)));
-dx=abs(x_range-v(2)*ones(1,2*rootSize(2)));
+dy=y_range-v(1)*ones(1,2*rootSize(1));
+dx=x_range-v(2)*ones(1,2*rootSize(2));
 dy_sq=dy.^2;
 dx_sq=dx.^2;
 

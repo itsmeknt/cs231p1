@@ -10,11 +10,11 @@ J = 1;
 
 maxsize = 2^28;
 globals;
-hdrfile = [tmpdir name '.hdr'];
-datfile = [tmpdir name '.dat'];
-modfile = [tmpdir name '.mod'];
-inffile = [tmpdir name '.inf'];
-lobfile = [tmpdir name '.lob'];
+hdrfile = [tmpdir name '2.hdr'];
+datfile = [tmpdir name '2.dat'];
+modfile = [tmpdir name '2.mod'];
+inffile = [tmpdir name '2.inf'];
+lobfile = [tmpdir name '2.lob'];
 
 labelsize = 5;  % [label id level x y]
 negpos = 0;     % last position in data mining
@@ -85,45 +85,55 @@ save([cachedir name '_model'], 'model');
 end
 
 function num = serializeFeatureToFile(posOrNeg, model, baseFeatureId, fid, isPos)
-for i=1:length(posOrNegVector)
-    [feat scale] = loadFeaturePyramidCache(posOrNeg(i).id);
-    if (isPos)
-        [dummy, ambiguous, negHard bestRootLoc bestPartLoc bestRootLevel bestComponentIdx] = detect(feat, scale, model, 1, false);
-        
-        posOrNeg(i).bestRootLoc = bestRootLoc;
-        posOrNeg(i).bestPartLoc = bestPartLoc;
-        posOrNeg(i).bestRootLevel = bestRootLevel;
-        posOrNeg(i).bestComponentIdx = bestComponentIdx;
+if (isPos)
+    [dummys ambiguouss bestRootLocs bestPartLocs bestRootLevels bestComponentIdxs] = detectParallel(posOrNeg, model, 1);
+    for i=1:length(posOrNeg)        
+        posOrNeg(i).bestRootLoc = bestRootLocs{i};
+        posOrNeg(i).bestPartLoc = bestPartLocs{i};
+        posOrNeg(i).bestRootLevel = bestRootLevels{i};
+        posOrNeg(i).bestComponentIdx = bestComponentIdxs{i};
     end
+end
+num = 0;
+for i=1:length(posOrNeg)
+    t = tic;
+    feat = loadFeaturePyramidCache(posOrNeg(i).id);
+
     
     % root filter features
     l = posOrNeg(i).bestRootLevel;
     rloc = posOrNeg(i).bestRootLoc;
     c = posOrNeg(i).bestComponentIdx;
-    rsize = model.rootfilters{model.components{c}.rootidx}.size;
-    rootFeat = symmetrizeFeature(feat{l}(rloc(1):rloc(1)+rsize(1)-1, rloc(2):rloc(2)+rsize(2)-1), rsize);
+    rsize = model.rootfilters{model.components{c}.rootindex}.size;
+    rootFeat = symmetrizeFeature(feat{l}(rloc(1):rloc(1)+rsize(1)-1, rloc(2):rloc(2)+rsize(2)-1, :), rsize);
     
     % part filter features
     ploc = posOrNeg(i).bestPartLoc;
-    defFeat = cell(model.numparst, 1);
-    partFeat = cell(model.numparst, 1);
+    defFeat = cell(model.numparts, 1);
+    partFeat = cell(model.numparts, 1);
+    partFeatFlipped = cell(model.numparts, 1);
     for j = 1:model.numparts
-        pDef = ploc{j}';
-        psize = size(model.partfilters{model.components{c}.parts{j}.partidx}.w);
-        
+        anchor = model.defs{model.components{c}.parts{j}.defidx}.anchor;
+        pDef = ploc(j,:) - rsize - anchor;
         defFeat{j} = [pDef(2) pDef(1) pDef(2)*pDef(2) pDef(1)*pDef(1)];
-        ploc = pDef + 2*rloc + model.defs{model.components{c}.parts{j}.defidx}.anchor;
-        partFeat{j} = symmetrizeFeature(feat{l-model.interval}(ploc(1):rloc(1)+psize(1)-1, ploc(2):ploc(2)+psize(2)-1), psize);
+        
+        psize = size(model.partfilters{model.components{c}.parts{j}.partidx}.w);
+        partloc = pDef + 2*rloc + anchor;
+        partFeat{j} = symmetrizeFeature(feat{l-model.interval}(partloc(1):partloc(1)+psize(1)-1, partloc(2):partloc(2)+psize(2)-1, :), psize);
+        partFeatFlipped{j} = flipfeat(partFeat{j});
     end
     
-    if pos
+    if isPos
         classVal = 1;
         serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+2*i-1, fid);
-        serializeFeature(fliplr(rootFeat), fliplr(partFeat), fliplr(defFeat), model, c, classVal, baseFeatureId+2*i, fid);
+        serializeFeature(flipfeat(rootFeat), partFeatFlipped, defFeat, model, c, classVal, baseFeatureId+2*i, fid);
     else
         classVal = -1;
         serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+i, fid);
     end
+    
+    num = num+1;
+    serializeTime = toc(t)
 end
 end
 
@@ -135,22 +145,22 @@ feat = feat(:,1:width1,:);
 end
 
 function fid = serializeFeature(rootFeat, partFeats, deformFeats, model, componentIdx, classVal, featureId, fid)
-ridx = model.components{c}.rootindex;
-oidx = model.components{c}.offsetindex;
+ridx = model.components{componentIdx}.rootindex;
+oidx = model.components{componentIdx}.offsetindex;
 rblocklabel = model.rootfilters{ridx}.blocklabel;
 oblocklabel = model.offsets{oidx}.blocklabel;
 
-fwrite(fid, [classVal featureId 0 0 0 2 dim], 'int32');
+fwrite(fid, [classVal featureId 0 0 0 2 model.components{componentIdx}.dim], 'int32');
 fwrite(fid, oblocklabel, 'single');
 fwrite(fid, 1, 'single');
 fwrite(fid, rblocklabel, 'single');
 fwrite(fid, rootFeat, 'single');
 for i=1:model.numparts
-    pidx = model.components{componentIdx}.partIdx;
+    pidx = model.components{componentIdx}.parts{i}.partidx;
     pblocklabel = model.partfilters{pidx}.blocklabel;
     fwrite(fid, pblocklabel, 'single');
     fwrite(fid, partFeats{i}, 'single');
-    didx = model.components{componentIdx}.defIdx;
+    didx = model.components{componentIdx}.parts{i}.defidx;
     dblocklabel = model.defs{didx}.blocklabel;
     fwrite(fid, dblocklabel, 'single');
     fwrite(fid, deformFeats{i}, 'single');

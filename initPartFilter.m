@@ -34,8 +34,8 @@ end
 
 function [model] = updateModelParameters(model, partBbox, partIdx, componentIdx)
 pIdx = model.components{componentIdx}.parts{partIdx}.partidx;
-energyMatrix = imresize(model.rootfilters{model.components{componentIdx}.rootindex}.w, 2, 'bicubic');
-model.partfilters{pIdx}.w = energyMatrix(partBbox(1):partBbox(3), partBbox(2):partBbox(4), :);
+rootMatrix = imresize(model.rootfilters{model.components{componentIdx}.rootindex}.w, 2, 'bicubic');
+model.partfilters{pIdx}.w = rootMatrix(partBbox(1):partBbox(3), partBbox(2):partBbox(4), :);
 
 dIdx = model.components{componentIdx}.parts{partIdx}.defidx;
 model.defs{dIdx}.anchor = [partBbox(1), partBbox(2)];

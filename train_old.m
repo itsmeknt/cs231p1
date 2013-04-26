@@ -27,10 +27,13 @@ for i = 1:model.numcomponents
 end
 maxnum = floor(maxsize / (dim * 4));
 
+cache = true;
 % Reset some of the tempoaray files, just in case
 % reset data file
-%fid = fopen(datfile, 'wb');
-%fclose(fid);
+if ~cache
+    fid = fopen(datfile, 'wb');                                                    % comment out
+    fclose(fid);                                                                   % comment out
+end
 % reset header file
 writeheader(hdrfile, 0, labelsize, model);  
 % reset info file
@@ -45,14 +48,16 @@ writelob(lobfile, model)
 
 
 % Find the positive examples and safe them in the data file
-%fid = fopen(datfile, 'w');
-%num = poswarp(name, model, 1, pos, fid);
-
-% Add random negatives
-%num = num + negrandom(name, model, 1, neg, maxnum-num, fid);
-%fclose(fid);
-
-num =  79793;
+if ~cache
+    fid = fopen(datfile, 'w');                                                     % comment out
+    num = poswarp(name, model, 1, pos, fid);                                       % comment out
+    
+    % Add random negatives
+    num = num + negrandom(name, model, 1, neg, maxnum-num, fid)                   % comment out
+    fclose(fid);                                                                   % comment out
+else
+    num = 79793;
+end
 
 % learn model
 writeheader(hdrfile, num, labelsize, model);
@@ -80,6 +85,7 @@ model = parsemodel(model, blocks);
     
 % compute threshold for high recall
 P = find((labels == 1) .* unique);
+
 pos_vals = sort(vals(P));
 model.thresh = pos_vals(ceil(length(pos_vals)*0.05));
 

@@ -99,7 +99,7 @@ model.numparts = 6;
 numcomponents = 1;
 rHeight = model.rootfilters{1}.size(1);
 rWidth = model.rootfilters{1}.size(2);
-partArea = 0.8*rHeight*rWidth;
+partArea = 0.8*rHeight*rWidth/6;
 pWidth = ceil(sqrt(partArea*(rWidth/rHeight)));
 pHeight = ceil(pWidth*(rHeight/rWidth));
 
@@ -109,7 +109,7 @@ for componentIdx = 1:numcomponents
     for partIdx = 1:model.numparts
         cumIdx = cumIdx+1;
         blockLabel = blockLabel+1;
-        model.partfilters{cumIdx}.blockLabel = blockLabel;
+        model.partfilters{cumIdx}.blocklabel = blockLabel;
         model.partfilters{cumIdx}.w = zeros(pHeight, pWidth, 31);
         model.blocksizes(blockLabel) = prod(size(model.partfilters{cumIdx}.w));
         model.regmult(blockLabel) = 1;
@@ -117,7 +117,7 @@ for componentIdx = 1:numcomponents
         model.lowerbounds{blockLabel} = -100*ones(model.blocksizes(blockLabel),1);
         
         blockLabel = blockLabel+1;
-        model.defs{cumIdx}.blockLabel = blockLabel;
+        model.defs{cumIdx}.blocklabel = blockLabel;
         model.defs{cumIdx}.w = [0, 0, 1, 1];
         model.blocksizes(blockLabel) = prod(size(model.defs{cumIdx}.w));
         model.regmult(blockLabel) = 1;

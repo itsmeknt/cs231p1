@@ -37,9 +37,11 @@ for i=1:length(model.partfilters)
     partfilters{i} = model.partfilters{i}.w;
 end
 
+maxScore = -realmax;
+
 % fconv after padding
-conv_roots = cell(numScales, length(scales));
-conv_parts = cell(numScales, length(scales));
+conv_roots = cell(length(scales), length(model.rootfilters));
+conv_parts = cell(length(scales), length(model.partfilters));
 for k=1:length(scales)
     featuresPadded = padarray(features{k}, [model.pady model.padx 0], 0);
     
@@ -51,7 +53,6 @@ for k=1:length(scales)
     end
 end
 
-% parallelize
 for i=1:model.numcomponents
     rootindex = model.components{i}.rootindex;
     rootsize = model.rootfilters{rootindex}.size;
@@ -62,10 +63,11 @@ for i=1:model.numcomponents
         % Compute the deformation cost matrix
         defIdx=model.components{i}.parts{j}.defindex;
         partDef=model.defs{defIdx};
-        deform(1,1,j)=computeDefMatrix(rootsize,partDef);
+        deform(:,:,j)=computeDefMatrix(rootsize,partDef);
     end 
     
     % Compute the score for each location of the root
+    % parallelize
     %matlabpool open feature('numcores');
     for k=orig_scale:last_scale
         rootScoreMatrix = conv_roots{k, model.components{i}.rootindex};
@@ -74,7 +76,7 @@ for i=1:model.numcomponents
             continue;
         end
         
-        ScoreMatrix{i, k} = rootScoreMatrix(1+model.pady:end-model.pady,1+model.padx:end-model.padx) + model.offsets{rootIdx}.w;
+        ScoreMatrix{i, k} = rootScoreMatrix(1+model.pady:end-model.pady,1+model.padx:end-model.padx) + model.offsets{rootindex}.w;
         
         convPartSize = size(conv_parts{k-model.interval, 1});
         partConvTensors=zeros(convPartSize(1), convPartSize(2), model.numparts);
@@ -83,18 +85,17 @@ for i=1:model.numcomponents
             partConvTensors(:,:,j) = conv_parts{k-model.interval, partindex};
         end
         
-        maxScore = -realmax;
-        for x=1:size(features{k},2)-rootSize(2)+1
-            for y=1:size(features{k},1)-rootSize(1)+1
+        for x=1:size(features{k},2)-rootsize(2)+1
+            for y=1:size(features{k},1)-rootsize(1)+1
                 partScores = partConvTensors((2*y):(2*y+2*rootsize(1)-1),(2*x):(2*x+2*rootsize(2)-1),:) + deform;
                 
-                [max_xs,ind_xs]=max(partScores(:,:,p), [], 2);
+                [max_xs,ind_xs]=max(partScores, [], 2);
                 [bestPartScores,partLocsY]=max(max_xs, [], 1);
                 
                 partLocs = zeros(model.numparts, 2);
                 for p=1:model.numparts
-                    partLocs(p,1) = partLocsY(p);
-                    partLocs(p,2) = ind_xs(partLocsY(p), 1, p);
+                    partLocs(p,1) = partLocsY(1,1,p);
+                    partLocs(p,2) = ind_xs(partLocsY(1,1,p), 1, p);
                 end
                 ScoreMatrix{i,k}(y,x)=ScoreMatrix{i,k}(y,x)+sum(bestPartScores);
                 

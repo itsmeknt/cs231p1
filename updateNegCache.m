@@ -1,43 +1,46 @@
 function [neg] = updateNegCache(allNeg, oldNeg, model, sizeLimit)
-
-neg = [];
-ambiguousData = [];
-for i=1:length(allNeg)
-    if length(neg) > sizeLimit
+[detectionsAboveThresholds detectionsAtThresholds bestRootLocs bestPartLocs bestRootLevels bestComponentIdxs bestScores] = detectParallel(allNeg, model, -1);
+dummy.bestRootLoc = zeros(1,2);
+dummy.bestPartLoc = zeros(model.numparts, 2);
+dummy.bestRootLevel = 0;
+dummy.bestComponentIdx = 0;
+dummy.im = 'dummy';
+dummy.id = 0;
+n = min(length(allNeg), sizeLimit);
+neg(1:n) = dummy;
+ambiguousData(1:n) = dummy;
+negIdx = 1;
+r_idx = randperm(length(allNeg));
+for idx=1:length(r_idx)
+    i = r_idx(idx);
+    if negIdx > sizeLimit
         break;
     end
     
-    a = tic;
-    [feat scale] = loadFeaturePyramidCache(allNeg(i).id);
-    cacheTime = toc(a)
-    
-    detectTic = tic;
-    [dummy, ambiguous, negHard bestRootLoc bestPartLoc bestRootLevel bestComponentIdx bestScore] = detect(feat, scale, model, 1);
-    detectTime = toc(detectTic)
-    
-    if bestScore < 1
+    if bestScores{i} < 1
         continue;
     end
-    entry.bestRootLoc = bestRootLoc;
-    entry.bestPartLoc = bestPartLoc;
-    entry.bestRootLevel = bestRootLevel;
-    entry.bestComponentIdx = bestComponentIdx;
+    entry.bestRootLoc = bestRootLocs{i};
+    entry.bestPartLoc = bestPartLocs{i};
+    entry.bestRootLevel = bestRootLevels{i};
+    entry.bestComponentIdx = bestComponentIdxs{i};
     entry.im = allNeg(i).im;
     entry.id = allNeg(i).id;
-    neg = [neg; entry];
-    if length(neg) > sizeLimit
+    neg(negIdx) = entry;
+    negIdx = negIdx+1;
+    if negIdx > sizeLimit
         break;
     end
     
-    for j=1:length(ambiguous)
-        entry.im = im;
-        entry.id = id;
-        bbox = ambiguous(i).rootBbox;
+    for j=1:length(detectionsAtThresholds{i})
+        entry.im = allNeg(i).im;
+        entry.id = allNeg(i).id;
+        bbox = detectionsAtThresholds{i}(j).rootBbox;
         entry.x1 = bbox(1);
         entry.y1 = bbox(2);
         entry.x2 = bbox(3);
         entry.y2 = bbox(4);
-        ambiguousData = [ambiguousData; entry];
+        ambiguousData(i) = entry;
     end
 end
 
@@ -50,13 +53,15 @@ for i=1:length(oldNeg)
 end
 
 for i=1:length(ambiguousData)
-    if length(neg) > sizeLimit
+    if negIdx > sizeLimit
         break;
     end
     if oldIdSet.contains(ambiguousData(i).id)
-        neg = [neg; ambiguousData(i)];
-        if length(neg) > sizeLimit
+        neg(negIdx) = ambiguousData(i);
+        negIdx = negIdx+1;
+        if negIdx > sizeLimit
             break;
         end
     end
 end
+neg = neg(1:negIdx-1);            % truncate off empty elements at the end
