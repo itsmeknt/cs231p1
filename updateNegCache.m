@@ -1,5 +1,5 @@
 function [neg] = updateNegCache(allNeg, oldNeg, model, sizeLimit)
-[detectionsAboveThresholds detectionsAtThresholds bestRootLocs bestPartLocs bestRootLevels bestComponentIdxs bestScores] = detectParallel(allNeg, model, -1);
+[bboxes bestDetections detectionsAtThresholds] = detectParallel(allNeg, model, -1, true, false);
 dummy.bestRootLoc = zeros(1,2);
 dummy.bestPartLoc = zeros(model.numparts, 2);
 dummy.bestRootLevel = 0;
@@ -17,13 +17,15 @@ for idx=1:length(r_idx)
         break;
     end
     
-    if bestScores{i} < 1
+    bestDetection = bestDetections{idx};
+    if bestDetection.score < -1
         continue;
     end
-    entry.bestRootLoc = bestRootLocs{i};
-    entry.bestPartLoc = bestPartLocs{i};
-    entry.bestRootLevel = bestRootLevels{i};
-    entry.bestComponentIdx = bestComponentIdxs{i};
+    
+    entry.bestRootLoc = bestDetection.rootLoc;
+    entry.bestPartLoc = bestDetection.partLocs;
+    entry.bestRootLevel = bestDetection.level;
+    entry.bestComponentIdx = bestDetection.component;
     entry.im = allNeg(i).im;
     entry.id = allNeg(i).id;
     neg(negIdx) = entry;

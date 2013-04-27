@@ -1,10 +1,15 @@
 function model = pascal_train(cls, n)
 
+% detect parallel
+% train l92
+% train l101
+
 % model = pascal_train(cls)
 % Train a model using the PASCAL dataset.
 
 globals; 
 [pos, allNeg] = pascal_data(cls);
+
 cacheFeaturePyramids(pos, 8, 10);               % sbin 8, interval 10
 cacheFeaturePyramids(allNeg, 8, 10);               % sbin 8, interval 10
 
@@ -20,8 +25,7 @@ end
 % PUT YOUR CODE HERE
 % TODO: Train the rest of the DPM (latent root position, part filters, ...)
 
-model = initmodel(pos);
-model = initPartFilter(model, 6);
+model = initParts(model, 1);
 ITER = 2;
 DATAMINE_ITER = 2;
 neg = allNeg;

@@ -1,4 +1,4 @@
-function [detectionsAboveThreshold, detectionsAtThreshold bestRootLoc bestPartLoc bestRootLevel bestComponentIdx bestScore] = detectParallel(posOrNegs, model, threshold)
+function [detectionBboxes detections, detectionsAtThreshold] = detectParallel(posOrNegs, model, threshold, chooseBest, doPosLatent)
 %UNTITLED3 Summary of this function goes here
 %   Detailed explanation goes here
 [dummy, scales] = loadFeaturePyramidCache(posOrNegs(1).id);
@@ -10,40 +10,32 @@ idxs = 1:n;
 %    feats{p} = loadFeaturePyramidCache(posOrNegs(p).id);
 %end
 
-detectionsAboveThreshold = cell(1,n);
+detectionBboxes = cell(1,n);
+detections = cell(1,n);
 detectionsAtThreshold = cell(1,n);
-bestRootLoc = cell(1,n);
-bestPartLoc = cell(1,n);
-bestRootLevel = cell(1,n);
-bestComponentIdx = cell(1,n);
-bestScore = cell(1,n);
-
 dtic = tic;
 for i=1:n
+    if (doPosLatent)
+        entry = posOrNegs(i);
+        trueBbox = [entry.x1, entry.y1, entry.x2, entry.y2];
+    else
+        trueBbox = [];
+    end
 %    i
-%     [detectionsAboveThreshold{i}, detectionsAtThreshold{i} bestRootLoc{i} bestPartLoc{i} bestRootLevel{i} bestComponentIdx{i} bestScore{i}] = detect(feats{i}, scales, model, threshold);
-     [detectionsAboveThreshold{i}, detectionsAtThreshold{i} bestRootLoc{i} bestPartLoc{i} bestRootLevel{i} bestComponentIdx{i} bestScore{i}] = detect(dummy, scales, model, threshold);
+%     [detectionBboxes{i} detections{i}, detectionsAtThreshold{i}] = detect(feats{i}, scales, model, threshold, chooseBest, trueBbox);
+     [detectionBboxes{i} detections{i}, detectionsAtThreshold{i}] = detect(dummy, scales, model, threshold, chooseBest, trueBbox);
      break;
 end
 detectTime = toc(dtic)
 %matlabpool close;
 %{
-detectionsAboveThreshold = detectionsAboveThreshold(idxs);
+detectionBboxes = detectionBboxes(idxs);
+detections = detections(idxs);
 detectionsAtThreshold = detectionsAtThreshold(idxs);
-bestRootLoc = bestRootLoc(idxs);
-bestPartLoc = bestPartLoc(idxs);
-bestRootLevel = bestRootLevel(idxs);
-bestComponentIdx = bestComponentIdx(idxs);
-bestScore = bestScore(idxs);
 %}
 
-detectionsAboveThreshold(1:n) = detectionsAboveThreshold(1);
+detectionBboxes(1:n) = detectionBboxes(1);
+detections(1:n) = detections(1);
 detectionsAtThreshold(1:n) = detectionsAtThreshold(1);
-bestRootLoc(1:n) = bestRootLoc(1);
-bestPartLoc(1:n) = bestPartLoc(1);
-bestRootLevel(1:n) = bestRootLevel(1);
-bestComponentIdx(1:n) = bestComponentIdx(1);
-bestScore(1:n) = bestScore(1);
-
 end
 

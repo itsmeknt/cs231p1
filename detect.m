@@ -1,4 +1,4 @@
-function [detections detectionsAtThreshold] = detect(featPyramid, scales, model, threshold, latent)
+function [detectionBboxes detections detectionsAtThreshold] = detect(featPyramid, scales, model, threshold, chooseBest, trueBbox)
 
 % detects objects in feat pyramid
 %
@@ -7,9 +7,10 @@ function [detections detectionsAtThreshold] = detect(featPyramid, scales, model,
 % scales - scales of the feature pyramid from featpyramid.m
 % model - model to use for detection
 % threshold - detection threshold
-% latent - if true, detections returns only the best
-%       detection. If false, detections returns all detections above
-%       threshold
+% chooseBest - if true, detections returns only the best detections (usually one, unless there is a tie in score).
+%       If false, detections returns all detections above threshold
+%       For positive latent, should set this to true and provide trueBbox.
+% trueBbox - The true bbox annotated by the data.
 
 % output:
 % detections - array of detection structs. Has to be above threshold.
@@ -23,6 +24,11 @@ function [detections detectionsAtThreshold] = detect(featPyramid, scales, model,
 %               model.filters.
 %   .score - score of the detection
 %   .component - the component used for the detection
+%   .level - pyramid level of root filter
+%   .rootLoc - [x,y] of root location in feature
+%                                       space
+%   .partLocs - a px2 matrix where each row is a
+%                                   [x,y] of part location in feature space
 
 % prepare model for convolutions
 rootfilters = cell(length(model.rootfilters), 1);
@@ -64,134 +70,149 @@ end
 padx = model.padx;
 pady = model.pady;
 
-bestScore = -inf;
-bestDetection = [];
-detectionsAboveThreshold = [];
+detections = [];
 detectionsAtThreshold = [];
-for pLevelIdx = 1:length(scales)
+for pLevelIdx = model.interval+1:length(scales)
     scale = scales(pLevelIdx);
-    if size(featPyramid{level}, 1)+2*pady < model.maxsize(1) || size(featPyramid{level}, 2)+2*padx < model.maxsize(2)
+    
+    % skip sizes too small
+    if size(featPyramid{pLevelIdx}, 1)+2*pady < model.maxsize(1) || size(featPyramid{pLevelIdx}, 2)+2*padx < model.maxsize(2)
         continue;
     end
     
+    % convolve feature maps with filters
+    featr = padarray(featPyramid{pLevelIdx}, [pady padx 0], 0);
+    conv_roots = fconv(featr, rootfilters, 1, length(rootfilters));
+    
+    if ~isempty(partfilters)
+        featp = padarray(featPyramid{pLevelIdx-model.interval}, [2*pady 2*padx 0], 0);
+        conv_parts = fconv(featp, partfilters, 1, length(partfilters));
+    end
+  
     for cIdx = 1:model.numcomponents
         rootSize = model.rootfilters{model.components{cIdx}.rootindex}.size;
-        
-        score = Array{cIdx, pLevelIdx};
-       
-        % threshold scores
-        Iabove = find(score > threshold);
-        detectionsAboveThreshold = [detectionsAboveThreshold; formatDetections(score, Iabove, cIdx, scale, model.padx, model.pady, rootSize)];
-        Iat = find(score == threshold);
-        detectionsAtThreshold = [detectionsAtThreshold; formatDetections(score, Iat, cIdx, scale, model.padx, model.pady, rootSize)];
-    end
-end
-end
-
-ScoreMatrix=cell(model.numcomponents,length(features));
-
-% Find the original scale and last scale indices
-orig_scale=find(scales==1);
-last_scale=size(scales,1);
-numScales = last_scale-orig_scale+1;
-
-% initialize fconv variables
-rootfilters = cell(1, length(model.rootfilters));
-for i=1:length(model.rootfilters)
-    rootfilters{i} = model.rootfilters{i}.w;
-end
-partfilters = cell(1, length(model.partfilters));
-for i=1:length(model.partfilters)
-    partfilters{i} = model.partfilters{i}.w;
-end
-
-maxScore = -realmax;
-
-% fconv after padding
-conv_roots = cell(length(scales), length(model.rootfilters));
-conv_parts = cell(length(scales), length(model.partfilters));
-for k=1:length(scales)
-    featuresPadded = padarray(features{k}, [model.pady model.padx 0], 0);
-    
-    if k > model.interval
-        conv_roots(k, :) = fconv(featuresPadded, rootfilters, 1, length(rootfilters));    
-    end
-    if k <= length(scales) - model.interval
-        conv_parts(k, :) = fconv(featuresPadded, partfilters, 1, length(partfilters));
-    end
-end
-
-for i=1:model.numcomponents
-    rootindex = model.components{i}.rootindex;
-    rootsize = model.rootfilters{rootindex}.size;
-    
-    % initialize deformation matrix
-    deform=zeros(2*rootsize(1),2*rootsize(2),model.numparts);       % tensor vector
-    for j=1:model.numparts
-        % Compute the deformation cost matrix
-        defIdx=model.components{i}.parts{j}.defindex;
-        partDef=model.defs{defIdx};
-        deform(:,:,j)=computeDefMatrix(rootsize,partDef);
-    end 
-    
-    % Compute the score for each location of the root
-    % parallelize
-    %matlabpool open feature('numcores');
-    for k=orig_scale:last_scale
-        rootScoreMatrix = conv_roots{k, model.components{i}.rootindex};
-        if size(rootScoreMatrix,1)-2*model.pady <= 0 || size(rootScoreMatrix,2)-2*model.padx <= 0
-            ScoreMatrix{i, k} = zeros(0,0);
-            continue;
+        partSizes = zeros(model.numparts, 2);
+        for p=1:model.numparts
+            w = model.partfilters{model.components{cIdx}.parts{p}.partindex}.w;
+            partSizes(p,:) = [size(w, 1), size(w, 2)];
         end
+        rootScoreMatrix = conv_roots{model.components{cIdx}.rootindex};
+        rootConvSize = size(rootScoreMatrix);
         
-        ScoreMatrix{i, k} = rootScoreMatrix(1+model.pady:end-model.pady,1+model.padx:end-model.padx) + model.offsets{rootindex}.w;
+        % root score + offset
+        score = conv_roots{ridx{c}} + model.offsets{oidx{c}}.w;
         
-        convPartSize = size(conv_parts{k-model.interval, 1});
-        partConvTensors=zeros(convPartSize(1), convPartSize(2), model.numparts);
+        % initialize deformation tensor
+        deform=cell(1, model.numparts);       % tensor vector
         for j=1:model.numparts
-            partindex = model.components{i}.parts{j}.partindex;
-            partConvTensors(:,:,j) = conv_parts{k-model.interval, partindex};
+            % Compute the deformation cost matrix
+            partSize = size(model.partfilters{pidx{cIdx, p}}.w);
+            
+            defIdx=model.components{cIdx}.parts{j}.defindex;
+            partDef=model.defs{defIdx};
+            deform{j}=computeDefMatrix(rootSize,partSize,partDef);
         end
         
-        for x=1:size(features{k},2)-rootsize(2)+1
-            for y=1:size(features{k},1)-rootsize(1)+1
-                partScores = partConvTensors((2*y):(2*y+2*rootsize(1)-1),(2*x):(2*x+2*rootsize(2)-1),:) + deform;
-                
-                [max_xs,ind_xs]=max(partScores, [], 2);
-                [bestPartScores,partLocsY]=max(max_xs, [], 1);
-                
+        % part score + deformation cost
+        for rConvX=1:rootConvSize(2)
+            for rConvY=1:rootConvSize(1)
+                bestPartScores = zeros(model.numparts, 1);
                 partLocs = zeros(model.numparts, 2);
-                for p=1:model.numparts
-                    partLocs(p,1) = partLocsY(1,1,p);
-                    partLocs(p,2) = ind_xs(partLocsY(1,1,p), 1, p);
-                end
-                ScoreMatrix{i,k}(y,x)=ScoreMatrix{i,k}(y,x)+sum(bestPartScores);
                 
-                if (ScoreMatrix{i,k}(y,x)>maxScore)
-                    maxScore=ScoreMatrix{i,k}(y,x);
-                    component=i;
-                    rootLoc=[y x];
-                    partLoc=partLocs;
-                    level=k;
+                for p = 1:model.numparts
+                    partSize = size(model.partfilters{pidx{cIdx, p}}.w);
+                    rFeatXmin = rConvX;
+                    rFeatYmin = rConvY;
+                    
+                    pFeatXmin = 2*(rFeatXmin-1)+1;
+                    pFeatXmax = pFeatXmin + 2*rootSize(2) - 1;
+                    pFeatYmin = 2*(rFeatYmin-1)+1;
+                    pFeatYmax = pFeatYmin + 2*rootSize(1) - 1;
+                    
+                    pConvXmin = pFeatXmin;
+                    pConvXmax = pFeatXmax - partSize(2) + 1;
+                    pConvYmin = pFeatYmin;
+                    pConvYmax = pFeatYmax - partSize(1) + 1;
+                    partScores = conv_parts{pidx{cIdx, p}}(pConvYmin:pConvYmax, pConvXmin:pConvXmax) - deform{p};
+                    
+                    [maxCol, yIdx] = max(partScores);
+                    [bestPartScores(p) xIdx] = max(maxCol);
+                    partLocs(p,:) = [yIdx(xIdx), xIdx];
+                end
+                
+                score(rConvY,rConvX)=score(rConvY,rConvX)+sum(bestPartScores);
+                
+                if chooseBest
+                    add = false;
+                    if isempty(detections)
+                        add = true;
+                    else
+                        if (~isempty(trueBbox) && computeOverlap(trueBbox, [rConvX, rConvY, rConvX + rootSize(2) - 1, rConvY + rootSize(1) - 1]) > 0.7)
+                            add = true;
+                        elseif (score(rConvY,rConvX)>detections(1).score)
+                            add = true;
+                        end
+                    end
+                    
+                    if (add)
+                        detections = formatDetection(score(rConvY,rConvX), [rConvY,rConvX], partLocs, cIdx, scale, pLevelIdx, model.padx, model.pady, rootSize, partSizes);
+                    end
                 end
             end
         end
+        
+        if ~chooseBest
+            Iabove = find(score > threshold);
+            detections = [detections; formatDetections(score, Iabove, partLocs, cIdx, scale, pLevelIdx, model.padx, model.pady, rootSize, partSizes, model.numparts)];
+        end
+        
+        Iat = find(score == threshold);
+        detectionsAtThreshold = [detectionsAtThreshold; formatDetections(score, Iat, partLocs, cIdx, scale, pLevelIdx, model.padx, model.pady, rootSize, partSizes, model.numparts)];
     end
 end
 
 
-function detections = formatDetections(score, I, componentIdx, scale, padx, pady, rootSize)
-detections = [];
+detectionBboxes = zeros(size(detections, 1), 4);
+for i=1:size(detections,1)
+    detectionBboxes(i,:) = detections(i).rootBbox;
+end
+end
+
+
+
+function detections = formatDetections(score, I, partLocs, componentIdx, scale, pyramidLevel, padx, pady, rootSize, partSizes, numparts)
+detections(1:length(I)) = getDummyDetectionStruct(numparts);
 [Y, X] = ind2sub(size(score), I);
 for i = 1:length(I)
     x = X(i);
     y = Y(i);
-    rootBbox = getBoundingBox(x, y, scale, padx, pady, rootSize);
-    entry.rootBbox = rootBbox;
-    entry.partBbox = [];
-    entry.score = score(I(i));
-    entry.component = componentIdx;
-    detections = [detections; entry];
+    detections(i) = formatDetection(score(y,x), [y, x], partLocs, componentIdx, scale, pyramidLevel, padx, pady, rootSize, partSizes);
 end
+end
+
+function detection = formatDetection(score, rootLoc, partLocs, componentIdx, scale, pyramidLevel, padx, pady, rootSize, partSizes)
+    rootBbox = getBoundingBox(rootLoc(2), rootLoc(1), scale, padx, pady, rootSize);
+    detection.rootBbox = rootBbox;
+    detection.partBbox = zeros(size(partLocs,1), 4);
+    for i=1:size(partLocs,1)
+        partBbox = getBoundingBox(2*rootLoc(2) + partLocs(i,2), 2*rootLoc(1) + partLocs(i,1), 2*scale, 2*padx, 2*pady, partSizes(i,:));
+        detection.partBbox(i,:) = partBbox;
+    end
+    detection.score = score;
+    detection.component = componentIdx;
+    detection.level = pyramidLevel;
+    detection.rootLoc = rootLoc; 
+    detection.partLocs = partLocs;   
+end
+
+
+function dummy = getDummyDetectionStruct(numparts)                    
+dummy.rootBbox = zeros(1, 4) - 1;
+dummy.partBbox = zeros(numparts, 4) - 1;
+dummy.score = -1;
+dummy.component = -1;
+dummy.level = -1;
+dummy.rootLoc = zeros(1, 2) - 1;
+dummy.partLoc = zeros(numparts, 2) - 1;
 end
 

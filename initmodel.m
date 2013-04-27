@@ -23,6 +23,7 @@ function model = initmodel(pos,varargin)
 %   .w
 %   .blocklabel
 % model.partfilters{i}
+%   .size
 %   .w
 %   .blocklabel
 % model.defs{i}
@@ -41,6 +42,7 @@ function model = initmodel(pos,varargin)
 %   .dim
 %   .numblocks
 
+model.blocksizes = zeros(1,14);
 % pick mode of aspect ratios
 h = [pos(:).y2]' - [pos(:).y1]' + 1;
 w = [pos(:).x2]' - [pos(:).x1]' + 1;
@@ -95,105 +97,18 @@ model.lowerbounds{2} = -100*ones(model.blocksizes(2),1);
 
 % set up parts and deformations
 % part filter is symmetric
-model.numparts = 6;
-numcomponents = 1;
-rHeight = model.rootfilters{1}.size(1);
-rWidth = model.rootfilters{1}.size(2);
-partArea = 0.8*rHeight*rWidth/6;
-pWidth = ceil(sqrt(partArea*(rWidth/rHeight)));
-pHeight = ceil(pWidth*(rHeight/rWidth));
-
-blockLabel = 2;
-cumIdx = 0;
-for componentIdx = 1:numcomponents
-    for partIdx = 1:model.numparts
-        cumIdx = cumIdx+1;
-        blockLabel = blockLabel+1;
-        model.partfilters{cumIdx}.blocklabel = blockLabel;
-        model.partfilters{cumIdx}.w = zeros(pHeight, pWidth, 31);
-        model.blocksizes(blockLabel) = prod(size(model.partfilters{cumIdx}.w));
-        model.regmult(blockLabel) = 1;
-        model.learnmult(blockLabel) = 1;
-        model.lowerbounds{blockLabel} = -100*ones(model.blocksizes(blockLabel),1);
-        
-        blockLabel = blockLabel+1;
-        model.defs{cumIdx}.blocklabel = blockLabel;
-        model.defs{cumIdx}.w = [0, 0, 1, 1];
-        model.blocksizes(blockLabel) = prod(size(model.defs{cumIdx}.w));
-        model.regmult(blockLabel) = 1;
-        model.learnmult(blockLabel) = 1;
-        model.lowerbounds{blockLabel} = [-100, -100, 0, 0];
-        
-        model.components{componentIdx}.parts{partIdx}.partindex = cumIdx;
-        model.components{componentIdx}.parts{partIdx}.partidx = cumIdx;
-        model.components{componentIdx}.parts{partIdx}.defindex = cumIdx;
-        model.components{componentIdx}.parts{partIdx}.defidx = cumIdx;
-    end
-end
-    
+  
 % set up one component model
-model.numcomponents = numcomponents;
 model.components{1}.rootindex = 1;
 model.components{1}.rootidx = 1;
 model.components{1}.offsetindex = 1;
 model.components{1}.offsetidx = 1;
-model.components{1}.dim = 14 + sum(model.blocksizes);
-model.components{1}.numblocks = 2;
+model.components{1}.dim = model.numblocks + sum(model.blocksizes);
+model.components{1}.numblocks = 14;
 
 % initialize the rest of the model structure
 model.interval = 10;
-model.numblocks = 14;
-model.maxsize = [-realmax, -realmax];
-for i=1:length(model.rootfilters)
-    fsize = model.rootfilters{i}.size;
-    if (fsize(1) > model.maxsize(1))
-        model.maxsize(1) = fsize(1);
-    end
-    if (fsize(2) > model.maxsize(2))
-        model.maxsize(2) = fsize(2);
-    end
-end
-for i=1:length(model.partfilters)
-    fsize = size(model.partfilters{i}.w);
-    if (fsize(1) > model.maxsize(1))
-        model.maxsize(1) = fsize(1);
-    end
-    if (fsize(2) > model.maxsize(2))
-        model.maxsize(2) = fsize(2);
-    end
-end
-if model.maxsize(1) == -realmax
-    model.maxsize(1) = 0;
-end
-if model.maxsize(2) == -realmax
-    model.maxsize(2) = 0;
-end
-model.minsize = [realmax, realmax];
-for i=1:length(model.rootfilters)
-    fsize = model.rootfilters{i}.size;
-    if (fsize(1) < model.minsize(1))
-        model.minsize(1) = fsize(1);
-    end
-    if (fsize(2) < model.minsize(2))
-        model.minsize(2) = fsize(2);
-    end
-end
-for i=1:length(model.partfilters)
-    fsize = size(model.partfilters{i}.w);
-    if (fsize(1) < model.minsize(1))
-        model.minsize(1) = fsize(1);
-    end
-    if (fsize(2) < model.minsize(2))
-        model.minsize(2) = fsize(2);
-    end
-end
-if model.minsize(1) == realmax
-    model.minsize(1) = 0;
-end
-
-if model.minsize(2) == realmax
-    model.minsize(2) = 0;
-end
-
+model = initParts(model, 1);
+model.maxsize = model.rootfilters{1}.size;
 model.padx = ceil(model.maxsize(2)/2+1);
 model.pady = ceil(model.maxsize(1)/2+1);

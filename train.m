@@ -84,56 +84,64 @@ model.thresh = pos_vals(ceil(length(pos_vals)*0.05));
 save([cachedir name '_model'], 'model');
 end
 
-function num = serializeFeatureToFile(posOrNeg, model, baseFeatureId, fid, isPos)
+function num = serializeFeatureToFile(posOrNegs, model, baseFeatureId, fid, isPos)
 if (isPos)
-    [dummys ambiguouss bestRootLocs bestPartLocs bestRootLevels bestComponentIdxs] = detectParallel(posOrNeg, model, 1);
-    for i=1:length(posOrNeg)        
-        posOrNeg(i).bestRootLoc = bestRootLocs{i};
-        posOrNeg(i).bestPartLoc = bestPartLocs{i};
-        posOrNeg(i).bestRootLevel = bestRootLevels{i};
-        posOrNeg(i).bestComponentIdx = bestComponentIdxs{i};
+    [bboxes bestDetections ambiguousCases] = detectParallel(posOrNegs, model, 0, true, true);
+    for i=1:length(posOrNegs)  
+        bestDetection = bestDetections{i};
+        posOrNegs(i).bestRootLoc = bestDetection(1).rootLoc;
+        posOrNegs(i).bestPartLoc = bestDetection(1).partLocs;
+        posOrNegs(i).bestRootLevel = bestDetection(1).level;
+        posOrNegs(i).bestComponentIdx = bestDetection(1).component;
     end
 end
 num = 0;
-for i=1:length(posOrNeg)
+for i=1:length(posOrNegs)
     t = tic;
-    feat = loadFeaturePyramidCache(posOrNeg(i).id);
+    feat = loadFeaturePyramidCache(posOrNegs(1).id);
 
     
     % root filter features
-    l = posOrNeg(i).bestRootLevel;
-    rloc = posOrNeg(i).bestRootLoc;
-    c = posOrNeg(i).bestComponentIdx;
+    l = posOrNegs(i).bestRootLevel;
+    rloc = posOrNegs(i).bestRootLoc;
+    c = posOrNegs(i).bestComponentIdx;
     rsize = model.rootfilters{model.components{c}.rootindex}.size;
-    rootFeat = symmetrizeFeature(feat{l}(rloc(1):rloc(1)+rsize(1)-1, rloc(2):rloc(2)+rsize(2)-1, :), rsize);
     
+    paddedRfeat = padarray(feat{l}, [model.pady model.padx 0], 0);
+    rootFeat = symmetrizeFeature(paddedRfeat(rloc(1):rloc(1)+rsize(1)-1, rloc(2):rloc(2)+rsize(2)-1, :), rsize);
+    yc = round(rloc(1) + rsize(1)/2);
+    xc = round(rloc(2) + rsize(2)/2);
     % part filter features
-    ploc = posOrNeg(i).bestPartLoc;
+    plocs = posOrNegs(i).bestPartLoc;
     defFeat = cell(model.numparts, 1);
     partFeat = cell(model.numparts, 1);
     partFeatFlipped = cell(model.numparts, 1);
+    paddedPfeat = padarray(feat{l-model.interval}, [2*model.pady 2*model.padx 0], 0);
     for j = 1:model.numparts
         anchor = model.defs{model.components{c}.parts{j}.defidx}.anchor;
-        pDef = ploc(j,:) - rsize - anchor;
+        pDef = plocs(j,:) - rsize - anchor;
         defFeat{j} = [pDef(2) pDef(1) pDef(2)*pDef(2) pDef(1)*pDef(1)];
         
         psize = size(model.partfilters{model.components{c}.parts{j}.partidx}.w);
         partloc = pDef + 2*rloc + anchor;
-        partFeat{j} = symmetrizeFeature(feat{l-model.interval}(partloc(1):partloc(1)+psize(1)-1, partloc(2):partloc(2)+psize(2)-1, :), psize);
+        partFeat{j} = symmetrizeFeature(paddedPfeat(partloc(1):partloc(1)+psize(1)-1, partloc(2):partloc(2)+psize(2)-1, :), psize);
         partFeatFlipped{j} = flipfeat(partFeat{j});
     end
     
     if isPos
         classVal = 1;
-        serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+2*i-1, fid);
-        serializeFeature(flipfeat(rootFeat), partFeatFlipped, defFeat, model, c, classVal, baseFeatureId+2*i, fid);
+        num = num+1;
+        serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+num, l, xc, yc, fid);
+        num = num+1;
+        serializeFeature(flipfeat(rootFeat), partFeatFlipped, defFeat, model, c, classVal, baseFeatureId+num, l, xc, yc, fid);
     else
         classVal = -1;
-        serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+i, fid);
+        num = num+1;
+        serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+num, l, xc, yc, fid);
     end
     
-    num = num+1;
-    serializeTime = toc(t)
+    serializeTime = toc(t);
+    [i length(posOrNegs) serializeTime]
 end
 end
 
@@ -144,13 +152,13 @@ feat(:,1:width2,:) = feat(:,1:width2,:) + flipfeat(feat(:,width1+1:end,:));
 feat = feat(:,1:width1,:);
 end
 
-function fid = serializeFeature(rootFeat, partFeats, deformFeats, model, componentIdx, classVal, featureId, fid)
+function fid = serializeFeature(rootFeat, partFeats, deformFeats, model, componentIdx, classVal, featureId, level, xc, yc, fid)
 ridx = model.components{componentIdx}.rootindex;
 oidx = model.components{componentIdx}.offsetindex;
 rblocklabel = model.rootfilters{ridx}.blocklabel;
 oblocklabel = model.offsets{oidx}.blocklabel;
 
-fwrite(fid, [classVal featureId 0 0 0 2 model.components{componentIdx}.dim], 'int32');
+fwrite(fid, [classVal featureId level, xc, yc, model.components{componentIdx}.numblocks model.components{componentIdx}.dim], 'int32');
 fwrite(fid, oblocklabel, 'single');
 fwrite(fid, 1, 'single');
 fwrite(fid, rblocklabel, 'single');

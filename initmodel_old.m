@@ -93,12 +93,15 @@ model.lowerbounds{2} = -100*ones(model.blocksizes(2),1);
 
 % set up one component model
 model.components{1}.rootindex = 1;
+model.components{1}.rootidx = 1;
 model.components{1}.offsetindex = 1;
+model.components{1}.offsetidx = 1;
 model.components{1}.parts = {};
 model.components{1}.dim = 2 + model.blocksizes(1) + model.blocksizes(2);
 model.components{1}.numblocks = 2;
 
 % initialize the rest of the model structure
+model.numparts = 6;
 model.interval = 10;
 model.numcomponents = 1;
 model.numblocks = 2;
@@ -106,3 +109,5 @@ model.partfilters = {};
 model.defs = {};
 model.maxsize = model.rootfilters{1}.size;
 model.minsize = model.rootfilters{1}.size;
+model.padx = ceil(model.maxsize(2)/2+1);
+model.pady = ceil(model.maxsize(1)/2+1);
