@@ -13,21 +13,27 @@ globals;
 cacheFeaturePyramids(pos, 8, 10);               % sbin 8, interval 10
 cacheFeaturePyramids(allNeg, 8, 10);               % sbin 8, interval 10
 
+spos = split(pos, n);
+
 % train root filter using warped positives & random negatives
 try
   load([cachedir cls '_random']);
 catch
-  model = initmodel_old(pos);
-  model = train_old(cls, model, pos, allNeg);
-  save([cachedir cls '_random_orig'], 'model');
+    models = cell(1,n);
+    for i=1:n
+        models{i} = initmodel_old(spos{i});
+        models{i} = train_old(cls, models{i}, spos{i}, allNeg);
+        model = mergemodels(models);
+        save([cachedir cls '_random_orig'], 'model');
+    end
 end
 
 % PUT YOUR CODE HERE
 % TODO: Train the rest of the DPM (latent root position, part filters, ...)
 
 model = initParts(model, 1);
-ITER = 2;
-DATAMINE_ITER = 2;
+ITER = 1;
+DATAMINE_ITER = 1;
 neg = allNeg;
 for iter = 1:ITER
     iter
@@ -47,4 +53,4 @@ for iter = 1:ITER
         trainTime = toc(trainTic)
     end
 end
-save([cachedir cls '_random'], 'model');
+save([cachedir cls '_random_done'], 'model');

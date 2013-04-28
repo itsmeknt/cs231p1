@@ -81,7 +81,7 @@ pos_vals = sort(vals(P));
 model.thresh = pos_vals(ceil(length(pos_vals)*0.05));
 
 % cache model
-save([cachedir name '_model'], 'model');
+save([cachedir name '_model2'], 'model');
 end
 
 function num = serializeFeatureToFile(posOrNegs, model, baseFeatureId, fid, isPos)
@@ -98,7 +98,7 @@ end
 num = 0;
 for i=1:length(posOrNegs)
     t = tic;
-    feat = loadFeaturePyramidCache(posOrNegs(1).id);
+    feat = loadFeaturePyramidCache(posOrNegs(i).id, posOrNegs(i).im, model.sbin, model.interval);
 
     
     % root filter features
@@ -107,6 +107,15 @@ for i=1:length(posOrNegs)
     c = posOrNegs(i).bestComponentIdx;
     rsize = model.rootfilters{model.components{c}.rootindex}.size;
     
+    posOrNegs(i).id
+    l
+    size(feat)
+    rloc
+    rsize
+    model.pady
+    model.padx
+    feat
+    size(feat{l})
     paddedRfeat = padarray(feat{l}, [model.pady model.padx 0], 0);
     rootFeat = symmetrizeFeature(paddedRfeat(rloc(1):rloc(1)+rsize(1)-1, rloc(2):rloc(2)+rsize(2)-1, :), rsize);
     yc = round(rloc(1) + rsize(1)/2);
@@ -119,12 +128,30 @@ for i=1:length(posOrNegs)
     paddedPfeat = padarray(feat{l-model.interval}, [2*model.pady 2*model.padx 0], 0);
     for j = 1:model.numparts
         anchor = model.defs{model.components{c}.parts{j}.defidx}.anchor;
-        pDef = plocs(j,:) - rsize - anchor;
-        defFeat{j} = [pDef(2) pDef(1) pDef(2)*pDef(2) pDef(1)*pDef(1)];
+        pDef = plocs(j,:) - (2*rloc + anchor);
+        defFeat{j} = -abs([pDef(2) pDef(1) pDef(2)*pDef(2) pDef(1)*pDef(1)]);
         
         psize = size(model.partfilters{model.components{c}.parts{j}.partidx}.w);
-        partloc = pDef + 2*rloc + anchor;
-        partFeat{j} = symmetrizeFeature(paddedPfeat(partloc(1):partloc(1)+psize(1)-1, partloc(2):partloc(2)+psize(2)-1, :), psize);
+        partloc = plocs(j,:);
+        j
+        partloc
+        psize
+        size(paddedPfeat)
+        partFeat{j} = paddedPfeat(partloc(1):partloc(1)+psize(1)-1, partloc(2):partloc(2)+psize(2)-1, :);
+        partnerPartIdx = model.partfilters{model.components{c}.parts{j}.partindex}.partner;
+        if partnerPartIdx > 0
+            partnerLoc = plocs(model.partfilters{partnerPartIdx}.partnumber,:);
+            partnerAnchor = model.defs{partnerPartIdx}.anchor;
+            partnerAnchorAbsolute = 2*([model.pady model.padx] + rsize)  + partnerAnchor;
+            partnerDef = -abs([partnerLoc(2)-partnerAnchorAbsolute(2), partnerLoc(1)-partnerAnchorAbsolute(1), (partnerLoc(2)-partnerAnchorAbsolute(2))^2, (partnerLoc(1)-partnerAnchorAbsolute(2))^2]);
+            defFeat{j} = defFeat{j} + partnerDef(end:-1:1);
+            
+            partnerFeat = paddedPfeat(partnerLoc(1):partnerLoc(1)+psize(1)-1, partnerLoc(2):partnerLoc(2)+psize(2)-1, :);
+            partFeat{j} = partFeat{j} + flipfeat(partnerFeat);
+        else
+            partFeat{j} = symmetrizeFeature(partFeat{j});
+        end
+        
         partFeatFlipped{j} = flipfeat(partFeat{j});
     end
     
@@ -158,100 +185,19 @@ oidx = model.components{componentIdx}.offsetindex;
 rblocklabel = model.rootfilters{ridx}.blocklabel;
 oblocklabel = model.offsets{oidx}.blocklabel;
 
-fwrite(fid, [classVal featureId level, xc, yc, model.components{componentIdx}.numblocks model.components{componentIdx}.dim], 'int32');
-fwrite(fid, oblocklabel, 'single');
-fwrite(fid, 1, 'single');
-fwrite(fid, rblocklabel, 'single');
-fwrite(fid, rootFeat, 'single');
+header = [classVal; featureId; level; xc; yc; model.components{componentIdx}.numblocks; model.components{componentIdx}.dim];
+fwrite(fid, header, 'int32');
+buf1 = [oblocklabel; 1; rblocklabel; rootFeat(:)];
+fwrite(fid, buf1, 'single');
 for i=1:model.numparts
     pidx = model.components{componentIdx}.parts{i}.partidx;
+    if (model.partfilters{pidx}.fake)
+        continue;
+    end
     pblocklabel = model.partfilters{pidx}.blocklabel;
-    fwrite(fid, pblocklabel, 'single');
-    fwrite(fid, partFeats{i}, 'single');
     didx = model.components{componentIdx}.parts{i}.defidx;
     dblocklabel = model.defs{didx}.blocklabel;
-    fwrite(fid, dblocklabel, 'single');
-    fwrite(fid, deformFeats{i}, 'single');
-end
-end
-
-% get positive examples by warping positive bounding boxes
-% we create virtual examples by flipping each image left to right
-function num = poswarp(name, model, c, pos, fid)
-numpos = length(pos);
-warped = warppos(name, model, c, pos);
-ridx = model.components{c}.rootindex;
-oidx = model.components{c}.offsetindex;
-rblocklabel = model.rootfilters{ridx}.blocklabel;
-oblocklabel = model.offsets{oidx}.blocklabel;
-dim = model.components{c}.dim;
-width1 = ceil(model.rootfilters{ridx}.size(2)/2);
-width2 = floor(model.rootfilters{ridx}.size(2)/2);
-pixels = model.rootfilters{ridx}.size * model.sbin;
-minsize = prod(pixels);
-num = 0;
-for i = 1:numpos
-    if mod(i,100)==0
-        fprintf('%s: warped positive: %d/%d\n', name, i, numpos);
-    end
-    bbox = [pos(i).x1 pos(i).y1 pos(i).x2 pos(i).y2];
-    % skip small examples
-    if (bbox(3)-bbox(1)+1)*(bbox(4)-bbox(2)+1) < minsize
-      continue
-    end    
-    % get example
-    im = warped{i};
-    feat = features(im, model.sbin);
-    feat(:,1:width2,:) = feat(:,1:width2,:) + flipfeat(feat(:,width1+1:end,:));
-    feat = feat(:,1:width1,:);
-    fwrite(fid, [1 2*i-1 0 0 0 2 dim], 'int32');
-    fwrite(fid, [oblocklabel 1], 'single');
-    fwrite(fid, rblocklabel, 'single');
-    fwrite(fid, feat, 'single');    
-    % get flipped example
-    feat = features(im(:,end:-1:1,:), model.sbin);    
-    feat(:,1:width2,:) = feat(:,1:width2,:) + flipfeat(feat(:,width1+1:end,:));
-    feat = feat(:,1:width1,:);
-    fwrite(fid, [1 2*i 0 0 0 2 dim], 'int32');
-    fwrite(fid, [oblocklabel 1], 'single');
-    fwrite(fid, rblocklabel, 'single');
-    fwrite(fid, feat, 'single');
-    num = num+2;    
-end
-end
-
-% get random negative examples
-function num = negrandom(name, model, c, neg, maxnum, fid)
-numneg = length(neg);
-rndneg = floor(maxnum/numneg);
-ridx = model.components{c}.rootindex;
-oidx = model.components{c}.offsetindex;
-rblocklabel = model.rootfilters{ridx}.blocklabel;
-oblocklabel = model.offsets{oidx}.blocklabel;
-rsize = model.rootfilters{ridx}.size;
-width1 = ceil(rsize(2)/2);
-width2 = floor(rsize(2)/2);
-dim = model.components{c}.dim;
-num = 0;
-for i = 1:numneg
-  if mod(i,100)==0
-    fprintf('%s: random negatives: %d/%d\n', name, i, numneg);
-  end
-  im = color(imread(neg(i).im));
-  feat = features(double(im), model.sbin);  
-  if size(feat,2) > rsize(2) && size(feat,1) > rsize(1)
-    for j = 1:rndneg
-      x = random('unid', size(feat,2)-rsize(2)+1);
-      y = random('unid', size(feat,1)-rsize(1)+1);
-      f = feat(y:y+rsize(1)-1, x:x+rsize(2)-1,:);
-      f(:,1:width2,:) = f(:,1:width2,:) + flipfeat(f(:,width1+1:end,:));
-      f = f(:,1:width1,:);
-      fwrite(fid, [-1 (i-1)*rndneg+j 0 0 0 2 dim], 'int32');
-      fwrite(fid, [oblocklabel 1], 'single');
-      fwrite(fid, rblocklabel, 'single');
-      fwrite(fid, f, 'single');
-    end
-    num = num+rndneg;
-  end
+    buf = [pblocklabel; model.partfilters{pidx}.w(:); dblocklabel; model.defs{didx}.w(:)];
+    fwrite(fid, buf, 'single');
 end
 end

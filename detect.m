@@ -84,11 +84,13 @@ for pLevelIdx = model.interval+1:length(scales)
     featr = padarray(featPyramid{pLevelIdx}, [pady padx 0], 0);
     conv_roots = fconv(featr, rootfilters, 1, length(rootfilters));
     
+    %{
     if ~isempty(partfilters)
         featp = padarray(featPyramid{pLevelIdx-model.interval}, [2*pady 2*padx 0], 0);
         conv_parts = fconv(featp, partfilters, 1, length(partfilters));
     end
-  
+  %}
+    
     for cIdx = 1:model.numcomponents
         rootSize = model.rootfilters{model.components{cIdx}.rootindex}.size;
         partSizes = zeros(model.numparts, 2);
@@ -102,6 +104,33 @@ for pLevelIdx = model.interval+1:length(scales)
         % root score + offset
         score = conv_roots{ridx{c}} + model.offsets{oidx{c}}.w;
         
+        %{
+        transform_scores = cell(1,6);
+        transform_positions = cell(1,6);
+        for p = 1:model.numparts
+            [transform_scores{p} transform_positions{p}] = TwoDDistTransform(conv_parts{pidx{cIdx, p}}, [1 0 1 0]);
+        end
+        
+        %start
+        %{
+        for rConvX=1:rootConvSize(2)
+            for rConvY=1:rootConvSize(1)
+                bestPartScores = zeros(model.numparts, 1);
+                partLocs = zeros(model.numparts, 2);
+                for p=1:model.numparts
+                    anchor = model.defs{model.components{cIdx}.parts{p}.defindex}.anchor;
+                    anchorAbsolute = 2*([rConvY rConvX]) + anchor;
+                    transform_score_matrix = transform_scores{p};
+                    bestPartScores(p) = transform_score_matrix(anchorAbsolute(1), anchorAbsolute(2));
+                    partLocs(p,:) = [transform_positions{p}(anchorAbsolute(1), anchorAbsolute(2), 1), transform_positions{p}(anchorAbsolute(1), anchorAbsolute(2), 2)];
+                end
+            end
+        end
+        %}
+                %end
+                
+            % start
+    
         % initialize deformation tensor
         deform=cell(1, model.numparts);       % tensor vector
         for j=1:model.numparts
@@ -116,6 +145,13 @@ for pLevelIdx = model.interval+1:length(scales)
         % part score + deformation cost
         for rConvX=1:rootConvSize(2)
             for rConvY=1:rootConvSize(1)
+                partScores = 0;
+                for p=1:model.numparts
+                    
+                    
+                end
+                
+                    
                 bestPartScores = zeros(model.numparts, 1);
                 partLocs = zeros(model.numparts, 2);
                 
@@ -135,10 +171,14 @@ for pLevelIdx = model.interval+1:length(scales)
                     pConvYmax = pFeatYmax - partSize(1) + 1;
                     partScores = conv_parts{pidx{cIdx, p}}(pConvYmin:pConvYmax, pConvXmin:pConvXmax) - deform{p};
                     
+                    
+                    
                     [maxCol, yIdx] = max(partScores);
                     [bestPartScores(p) xIdx] = max(maxCol);
                     partLocs(p,:) = [yIdx(xIdx), xIdx];
                 end
+            
+                % end
                 
                 score(rConvY,rConvX)=score(rConvY,rConvX)+sum(bestPartScores);
                 
@@ -160,17 +200,58 @@ for pLevelIdx = model.interval+1:length(scales)
                 end
             end
         end
-        
+        %}
+        partLocs = ones(model.numparts, 2);
         if ~chooseBest
             Iabove = find(score > threshold);
-            detections = [detections; formatDetections(score, Iabove, partLocs, cIdx, scale, pLevelIdx, model.padx, model.pady, rootSize, partSizes, model.numparts)];
+            detections = [detections; formatDetections(score, Iabove, partLocs, cIdx, scale, pLevelIdx, model.padx, model.pady, rootSize, partSizes, model.numparts, model.sbin)];
+        else
+            if isempty(trueBbox)
+                [y_max y_ind] = max(score);
+                [maxScore x_ind] = max(y_max);
+                x = x_ind;
+                y = y_ind(x_ind);
+            else
+                trueBboxInScoreSpace = [model.padx model.pady model.padx model.pady] + ceil(scale*trueBbox/model.sbin) + [0 0 -rootSize(2)+1 -rootSize(1)+1];        % since score space is convolution space, we are only interested in the top left corner
+                trueBboxInScoreSpace(1) = min(size(score,2), trueBboxInScoreSpace(1));
+                trueBboxInScoreSpace(2) = min(size(score,1), trueBboxInScoreSpace(2));
+                trueBboxInScoreSpace(3) = max(trueBboxInScoreSpace(1), trueBboxInScoreSpace(3));
+                trueBboxInScoreSpace(4) = max(trueBboxInScoreSpace(2), trueBboxInScoreSpace(4));
+                minX = max(1, trueBboxInScoreSpace(1)-floor(rootSize(2)*0.3));
+                maxX = min(size(score,2), trueBboxInScoreSpace(3)+floor(rootSize(2)*0.3));
+                minY = max(1, trueBboxInScoreSpace(2)-floor(rootSize(1)*0.3));
+                maxY = min(size(score,1), trueBboxInScoreSpace(4)+floor(rootSize(1)*0.3));
+                
+                scale
+                trueBbox
+                trueBboxInScoreSpace
+                rootSize
+                size(score)
+                [minX, minY, maxX, maxY]
+                
+                clippedScore = score(minY:maxY, minX:maxX);
+               
+                [y_max_clipped y_ind_clipped] = max(clippedScore);
+                [maxScore x_ind_clipped] = max(y_max_clipped);
+                x = x_ind_clipped;
+                y = y_ind_clipped(x_ind_clipped);
+            end
+            
+            detections
+            maxScore
+            if ~isempty(detections)
+                detections(1)
+                detections(1).score
+            end
+            if isempty(detections) || maxScore > detections(1).score
+                detections = formatDetection(maxScore, [y,x], partLocs, cIdx, scale, pLevelIdx, model.padx, model.pady, rootSize, partSizes, model.sbin);
+            end
         end
         
         Iat = find(score == threshold);
-        detectionsAtThreshold = [detectionsAtThreshold; formatDetections(score, Iat, partLocs, cIdx, scale, pLevelIdx, model.padx, model.pady, rootSize, partSizes, model.numparts)];
+        detectionsAtThreshold = [detectionsAtThreshold; formatDetections(score, Iat, partLocs, cIdx, scale, pLevelIdx, model.padx, model.pady, rootSize, partSizes, model.numparts, model.sbin)];
     end
 end
-
 
 detectionBboxes = zeros(size(detections, 1), 4);
 for i=1:size(detections,1)
@@ -180,22 +261,23 @@ end
 
 
 
-function detections = formatDetections(score, I, partLocs, componentIdx, scale, pyramidLevel, padx, pady, rootSize, partSizes, numparts)
-detections(1:length(I)) = getDummyDetectionStruct(numparts);
+function detections = formatDetections(score, I, partLocs, componentIdx, scale, pyramidLevel, padx, pady, rootSize, partSizes, numparts, sbin)
+detections = [];
 [Y, X] = ind2sub(size(score), I);
 for i = 1:length(I)
     x = X(i);
     y = Y(i);
-    detections(i) = formatDetection(score(y,x), [y, x], partLocs, componentIdx, scale, pyramidLevel, padx, pady, rootSize, partSizes);
+    entry = formatDetection(score(y,x), [y, x], partLocs, componentIdx, scale, pyramidLevel, padx, pady, rootSize, partSizes, sbin);
+    detections = [detections; entry];
 end
 end
 
-function detection = formatDetection(score, rootLoc, partLocs, componentIdx, scale, pyramidLevel, padx, pady, rootSize, partSizes)
-    rootBbox = getBoundingBox(rootLoc(2), rootLoc(1), scale, padx, pady, rootSize);
+function detection = formatDetection(score, rootLoc, partLocs, componentIdx, scale, pyramidLevel, padx, pady, rootSize, partSizes, sbin)
+    rootBbox = sbin*getBoundingBox(rootLoc(2), rootLoc(1), scale, padx, pady, rootSize);
     detection.rootBbox = rootBbox;
     detection.partBbox = zeros(size(partLocs,1), 4);
     for i=1:size(partLocs,1)
-        partBbox = getBoundingBox(2*rootLoc(2) + partLocs(i,2), 2*rootLoc(1) + partLocs(i,1), 2*scale, 2*padx, 2*pady, partSizes(i,:));
+        partBbox = sbin*getBoundingBox(2*rootLoc(2) + partLocs(i,2), 2*rootLoc(1) + partLocs(i,1), 2*scale, 2*padx, 2*pady, partSizes(i,:));
         detection.partBbox(i,:) = partBbox;
     end
     detection.score = score;

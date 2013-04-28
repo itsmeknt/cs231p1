@@ -39,6 +39,9 @@ mid=rootSize(2)/2;
 while numAdded<model.numparts
 
     for i=1:numSizes
+        if (numAdded >= model.numparts)
+            break;
+        end
         % Compute the normalized energy score of each valid 
         % part filter size at every location of the root
         convScore=conv2(EnergyMat,validSizes{i},'valid');
@@ -84,43 +87,64 @@ while numAdded<model.numparts
         % now add the parts (1 addition if centered, 2 otherwise). Each
         % time a part is added the corresponding area in the energy matrix 
         % is zeroed out 
+        if ~centered && numAdded+1 >= model.numparts                            % we can only add 1 more part left, so we ignore non-centered parts
+            EnergyMat(y:y+size(validSizes{i},1)-1,x:x+size(validSizes{i},2)-1,:)=0;
+            continue;
+        end
         numAdded=numAdded+1;
-        model = updateModel(model, numAdded, rootWeights, x, y, validSizes, i, width, component);
+        [model partner1] = updateModel(model, numAdded, rootWeights, x, y, validSizes, i, width, component, false);
         EnergyMat(y:y+size(validSizes{i},1)-1,x:x+size(validSizes{i},2)-1,:)=0;
         
         if ~centered
             numAdded=numAdded+1;
-            model = updateModel(model, numAdded, rootWeights, sym_x, y, validSizes, i, width, component);
+            [model partner2] = updateModel(model, numAdded, rootWeights, sym_x, y, validSizes, i, width, component, true);
             EnergyMat(y:y+size(validSizes{i},1)-1,sym_x:sym_x+size(validSizes{i},2)-1,:)=0;
+            
+            model.partfilters{partner1}.partner = partner2;
+            model.partfilters{partner2}.partner = partner1;
+        end
+        if (numAdded >= model.numparts)
+            break;
         end
     end
 end
 end
         
 
-function model = updateModel(model, partIdx, rootWeights, x, y, validSizes, i, width, componentIdx)
+function [model partnerIdx] = updateModel(model, partIdx, rootWeights, x, y, validSizes, i, width, componentIdx, fake)
 cumIdx = length(model.partfilters) + 1;
 model.partfilters{cumIdx}.w=rootWeights(y:y+size(validSizes{i},1)-1,x:x+size(validSizes{i},2)-1,:);
-model.partfilters{cumIdx}.blocklabel = length(model.blocksizes)+1;
-model.blocksizes(model.partfilters{cumIdx}.blocklabel) = width*size(validSizes{i},1)*31;
-model.regmult(model.partfilters{cumIdx}.blocklabel) = 1;
-model.learnmult(model.partfilters{cumIdx}.blocklabel) = 1;
-model.lowerbounds{model.partfilters{cumIdx}.blocklabel} = -100*ones(model.blocksizes(model.partfilters{cumIdx}.blocklabel),1);
-model.numblocks = model.numblocks+1;
+model.partfilters{cumIdx}.fake = fake;
+model.partfilters{cumIdx}.partner = 0;
 
 model.defs{cumIdx}.anchor=[y x];
 model.defs{cumIdx}.w=[0 0 1 1];                   % initially only allow quadratic terms
-model.defs{cumIdx}.blocklabel = length(model.blocksizes)+1;
-model.blocksizes(model.defs{cumIdx}.blocklabel) = numel(model.defs{cumIdx}.w);
-model.regmult(model.defs{cumIdx}.blocklabel) = 1;
-model.learnmult(model.defs{cumIdx}.blocklabel) = 1;
-model.lowerbounds{model.defs{cumIdx}.blocklabel} = [-100, -100, 0, 0];
-model.numblocks = model.numblocks+1;
 
 model.components{componentIdx}.parts{partIdx}.partindex = cumIdx;
 model.components{componentIdx}.parts{partIdx}.partidx = cumIdx;
 model.components{componentIdx}.parts{partIdx}.defindex = cumIdx;
 model.components{componentIdx}.parts{partIdx}.defidx = cumIdx;
+
+model.partfilters{cumIdx}.partnumber = partIdx;
+    
+if ~fake
+    model.partfilters{cumIdx}.blocklabel = length(model.blocksizes)+1;
+    model.blocksizes(model.partfilters{cumIdx}.blocklabel) = width*size(validSizes{i},1)*31;
+    model.regmult(model.partfilters{cumIdx}.blocklabel) = 1;
+    model.learnmult(model.partfilters{cumIdx}.blocklabel) = 1;
+    model.lowerbounds{model.partfilters{cumIdx}.blocklabel} = -100*ones(model.blocksizes(model.partfilters{cumIdx}.blocklabel),1);
+    model.numblocks = model.numblocks+1;
+    
+    model.defs{cumIdx}.blocklabel = length(model.blocksizes)+1;
+    model.blocksizes(model.defs{cumIdx}.blocklabel) = numel(model.defs{cumIdx}.w);
+    model.regmult(model.defs{cumIdx}.blocklabel) = 1;
+    model.learnmult(model.defs{cumIdx}.blocklabel) = 1;
+    model.lowerbounds{model.defs{cumIdx}.blocklabel} = [-100, -100, 0, 0];
+    model.numblocks = model.numblocks+1;
+    
+    model.components{componentIdx}.dim = model.numblocks + sum(model.blocksizes);
+end
+partnerIdx = cumIdx;
 end
         
         

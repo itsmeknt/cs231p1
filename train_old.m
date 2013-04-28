@@ -27,7 +27,7 @@ for i = 1:model.numcomponents
 end
 maxnum = floor(maxsize / (dim * 4));
 
-cache = true;
+cache = false;
 % Reset some of the tempoaray files, just in case
 % reset data file
 if ~cache
@@ -90,7 +90,7 @@ pos_vals = sort(vals(P));
 model.thresh = pos_vals(ceil(length(pos_vals)*0.05));
 
 % cache model
-save([cachedir name '_model'], 'model');
+save([cachedir name '_model_old'], 'model');
 
 
 % get positive examples by warping positive bounding boxes
