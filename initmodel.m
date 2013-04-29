@@ -1,4 +1,4 @@
-function model = initmodel(pos,varargin)
+function model = initmodel(pos, sbin, size)
 
 % model = initmodel(pos, sbin, size)
 % Initialize model structure.
@@ -16,14 +16,11 @@ function model = initmodel(pos,varargin)
 % model.learnmult
 % model.maxsize
 % model.minsize
-% model.padx
-% model.pady
 % model.rootfilters{i}
 %   .size
 %   .w
 %   .blocklabel
 % model.partfilters{i}
-%   .size
 %   .w
 %   .blocklabel
 % model.defs{i}
@@ -42,7 +39,6 @@ function model = initmodel(pos,varargin)
 %   .dim
 %   .numblocks
 
-model.blocksizes = zeros(1,14);
 % pick mode of aspect ratios
 h = [pos(:).y2]' - [pos(:).y1]' + 1;
 w = [pos(:).x2]' - [pos(:).x1]' + 1;
@@ -95,20 +91,21 @@ model.regmult(2) = 1;
 model.learnmult(2) = 1;
 model.lowerbounds{2} = -100*ones(model.blocksizes(2),1);
 
-% set up parts and deformations
-% part filter is symmetric
-  
 % set up one component model
 model.components{1}.rootindex = 1;
-model.components{1}.rootidx = 1;
-model.components{1}.parts = {};
 model.components{1}.offsetindex = 1;
-model.components{1}.offsetidx = 1;
-model.components{1}.dim = model.numblocks + sum(model.blocksizes);
-model.components{1}.numblocks = 14;
+model.components{1}.parts = {};
+model.components{1}.dim = 2 + model.blocksizes(1) + model.blocksizes(2);
+model.components{1}.numblocks = 2;
 
 % initialize the rest of the model structure
+model.numparts = 0;
 model.interval = 10;
+model.numcomponents = 1;
+model.numblocks = 2;
+model.partfilters = {};
+model.defs = {};
 model.maxsize = model.rootfilters{1}.size;
-model.padx = ceil(model.maxsize(2)/2+1);
-model.pady = ceil(model.maxsize(1)/2+1);
+model.minsize = model.rootfilters{1}.size;
+model.padx = ceil(model.maxsize(2)/2 + 1);
+model.pady = ceil(model.maxsize(1)/2 + 1);

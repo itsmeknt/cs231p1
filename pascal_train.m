@@ -1,56 +1,51 @@
 function model = pascal_train(cls, n)
 
-% detect parallel
-% train l92
-% train l101
-
 % model = pascal_train(cls)
 % Train a model using the PASCAL dataset.
 
 globals; 
-[pos, allNeg] = pascal_data(cls);
+[pos, neg] = pascal_data(cls);
+allNeg = neg;
 
 cacheFeaturePyramids(pos, 8, 10);               % sbin 8, interval 10
-cacheFeaturePyramids(allNeg, 8, 10);               % sbin 8, interval 10
+cacheFeaturePyramids(neg, 8, 10);               % sbin 8, interval 10
 
 spos = split(pos, n);
-
+models = cell(1,n);
 % train root filter using warped positives & random negatives
 try
   load([cachedir cls '_random']);
 catch
-    models = cell(1,n);
-    for i=1:n
-        models{i} = initmodel_old(spos{i});
-        models{i} = train_old(cls, models{i}, spos{i}, allNeg);
-        model = mergemodels(models);
-        save([cachedir cls '_random_orig'], 'model');
-    end
+  for i=1:n
+    models{i} = initmodel(spos{i});
+    models{i} = train_old(cls, models{i}, spos{i}, neg);
+  end
+  save([cachedir cls '_random'], 'models');
 end
 
 % PUT YOUR CODE HERE
 % TODO: Train the rest of the DPM (latent root position, part filters, ...)
 
-model = initParts(model, 1);
-ITER = 1;
-DATAMINE_ITER = 1;
-neg = allNeg;
-for iter = 1:ITER
-    iter
-    % latent root position
-   %  pos = relabelpos(pos, model);
-    
-    for datamineIter = 1:DATAMINE_ITER
-        datamineIter
-        % get new negative data while removing easy ones
-        updateNegCacheTic = tic;
-        neg = updateNegCache(allNeg, neg, model, length(allNeg));
-        updateNegCacheTime = toc(updateNegCacheTic)
-        % train model
-        
-        trainTic = tic;
-        model = train(cls, model, pos, neg);                       % root filter training
-        trainTime = toc(trainTic)
-    end
+
+% merge models and train using latent detections & hard negatives
+try 
+  load([cachedir cls '_hard']);
+catch
+  model = mergemodels(models);
+  neg = updateNegCache(allNeg, neg, model, length(neg));
+  model = train_old(cls, model, pos, neg(1:200));
+  save([cachedir cls '_hard'], 'model');
 end
-save([cachedir cls '_random_done'], 'model');
+
+
+% add parts and update models using latent detections & hard negatives.
+try 
+  load([cachedir cls '_parts']);
+catch
+  for i=1:n
+    model = initParts(model, i, 6);
+  end 
+  neg = updateNegCache(allNeg, neg, model, length(neg));
+  model = train(cls, model, pos, neg(1:200)); 
+  save([cachedir cls '_parts'], 'model');
+end

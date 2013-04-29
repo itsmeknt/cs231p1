@@ -17,14 +17,12 @@ inffile = [tmpdir name '2.inf'];
 lobfile = [tmpdir name '2.lob'];
 
 labelsize = 5;  % [label id level x y]
-negpos = 0;     % last position in data mining
 
 % approximate bound on the number of examples used in each iteration
 dim = 0;
 for i = 1:model.numcomponents
   dim = max(dim, model.components{i}.dim);
 end
-maxnum = floor(maxsize / (dim * 4));
 
 % Reset some of the tempoaray files, just in case
 % reset data file
@@ -45,11 +43,12 @@ writelob(lobfile, model)
 
 % Find the positive examples and safe them in the data file
 fid = fopen(datfile, 'w');
-num = serializeFeatureToFile(pos, model, 0, fid, true); 
+num=0;
+num = num+serializeFeatureToFile(pos, model, num, fid, true); 
+num = num+serializeFeatureToFile(neg, model, num, fid, false); 
 % num = poswarp(name, model, 1, pos, fid);
 
 % Add random negatives
-num = num+serializeFeatureToFile(neg, model, length(pos), fid, false); 
 % num = num + negrandom(name, model, 1, neg, maxnum-num, fid);
 fclose(fid);
         
@@ -85,86 +84,136 @@ save([cachedir name '_model2'], 'model');
 end
 
 function num = serializeFeatureToFile(posOrNegs, model, baseFeatureId, fid, isPos)
-if (isPos)
-    [bboxes bestDetections ambiguousCases] = detectParallel(posOrNegs, model, 0, true, true);
-    for i=1:length(posOrNegs)  
-        bestDetection = bestDetections{i};
-        posOrNegs(i).bestRootLoc = bestDetection(1).rootLoc;
-        posOrNegs(i).bestPartLoc = bestDetection(1).partLocs;
-        posOrNegs(i).bestRootLevel = bestDetection(1).level;
-        posOrNegs(i).bestComponentIdx = bestDetection(1).component;
-    end
-end
+pixels = model.minsize * model.sbin;
+minsize = prod(pixels);
 num = 0;
 for i=1:length(posOrNegs)
     t = tic;
-    feat = loadFeaturePyramidCache(posOrNegs(i).id, posOrNegs(i).im, model.sbin, model.interval);
-
+    if isPos
+        % do latent root positioning
+        bbox = [posOrNegs(i).x1 posOrNegs(i).y1 posOrNegs(i).x2 posOrNegs(i).y2];
+        % skip small examples
+        if (bbox(3)-bbox(1)+1)*(bbox(4)-bbox(2)+1) < minsize
+            continue
+        end
+        
+        im = color(imread(posOrNegs(i).im));
+        [imCropped, bboxCropped] = croppos(im, bbox);
+        [featsCropped scale] = featpyramid(imCropped, model.sbin, model.interval);
+        [detectionBboxes bestDetection] = detect(featsCropped, scale, model, 0, true, bboxCropped);
+        if isempty(bestDetection)
+            continue
+        end
+        c = bestDetection(1).component;
+        l = bestDetection(1).level;
+        paddedRfeat = padarray(featsCropped{l}, [model.pady model.padx 0], 0);
+        rloc = bestDetection(1).rootLoc;
+        rsize = model.rootfilters{model.components{bestDetection(1).component}.rootindex}.size;
+        rootFeat = symmetrizeFeature(paddedRfeat(rloc(1):rloc(1)+rsize(1)-1, rloc(2):rloc(2)+rsize(2)-1, :), rsize);
+        plocs = bestDetection(1).partLocs;
+        showboxes(im, [detectionBboxes; bboxCropped, 1, 1]);
+        paddedPfeat = padarray(featsCropped{l-model.interval}, [2*model.pady 2*model.padx 0], 0);
+        
+        % now do the same for flipped image
+        imCroppedFlipped = im(:,end:-1:1,:);
+        [featsCroppedFlipped scales] = featpyramid(imCroppedFlipped, model.sbin, model.interval);
+        bboxCroppedFlipped = bboxCropped;
+        oldx1 = bboxCroppedFlipped(1);
+        oldx2 = bboxCroppedFlipped(3);
+        bboxCroppedFlipped(1) = size(imCroppedFlipped,2) - oldx2 + 1;
+        bboxCroppedFlipped(3) = size(imCroppedFlipped,2) - oldx1 + 1;
+        
+        [detectionFlippedBboxes bestDetectionFlipped] = detect(featsCroppedFlipped, scale, model, 0, true, bboxCroppedFlipped);
+        if isempty(bestDetectionFlipped)
+            continue
+        end
+        levelFlipped = bestDetectionFlipped(1).level;
+        paddedRfeatFlipped = padarray(featsCroppedFlipped{levelFlipped}, [model.pady model.padx 0], 0);
+        rlocFlipped = bestDetectionFlipped(1).rootLoc;
+        rsizeFlipped = model.rootfilters{model.components{bestDetectionFlipped(1).component}.rootindex}.size;
+        rootFeatFlipped = symmetrizeFeature(paddedRfeatFlipped(rlocFlipped(1):rlocFlipped(1)+rsizeFlipped(1)-1, rlocFlipped(2):rlocFlipped(2)+rsizeFlipped(2)-1, :), rsizeFlipped);
+        plocsFlipped = bestDetectionFlipped(1).partLocs;
+        showboxes(im, [detectionFlippedBboxes; bboxCroppedFlipped, 1, 1]);
+        paddedPfeatFlipped = padarray(featsCroppedFlipped{l-model.interval}, [2*model.pady 2*model.padx 0], 0);
+    else
+        feat = loadFeaturePyramidCache(posOrNegs(i).id, posOrNegs(i).im, model.sbin, model.interval);
+        % root filter features
+        l = posOrNegs(i).level;
+        rloc = posOrNegs(i).rootLoc;
+        c = posOrNegs(i).component;
+        plocs = posOrNegs(i).partLocs;
+        rsize = model.rootfilters{model.components{c}.rootindex}.size;
+        paddedRfeat = padarray(feat{l}, [model.pady model.padx 0], 0);
+        rootFeat = symmetrizeFeature(paddedRfeat(rloc(1):rloc(1)+rsize(1)-1, rloc(2):rloc(2)+rsize(2)-1, :), rsize);
+        
+        paddedPfeat = padarray(feat{l-model.interval}, [2*model.pady 2*model.padx 0], 0);
+    end
     
-    % root filter features
-    l = posOrNegs(i).bestRootLevel;
-    rloc = posOrNegs(i).bestRootLoc;
-    c = posOrNegs(i).bestComponentIdx;
-    rsize = model.rootfilters{model.components{c}.rootindex}.size;
     
-    posOrNegs(i).id
-    l
-    size(feat)
-    rloc
-    rsize
-    model.pady
-    model.padx
-    feat
-    size(feat{l})
-    paddedRfeat = padarray(feat{l}, [model.pady model.padx 0], 0);
-    rootFeat = symmetrizeFeature(paddedRfeat(rloc(1):rloc(1)+rsize(1)-1, rloc(2):rloc(2)+rsize(2)-1, :), rsize);
-    yc = round(rloc(1) + rsize(1)/2);
-    xc = round(rloc(2) + rsize(2)/2);
+    
     % part filter features
-    plocs = posOrNegs(i).bestPartLoc;
     defFeat = cell(model.numparts, 1);
+    defFeatFlipped = cell(model.numparts, 1);
     partFeat = cell(model.numparts, 1);
     partFeatFlipped = cell(model.numparts, 1);
-    paddedPfeat = padarray(feat{l-model.interval}, [2*model.pady 2*model.padx 0], 0);
     for j = 1:model.numparts
-        anchor = model.defs{model.components{c}.parts{j}.defidx}.anchor;
-        pDef = plocs(j,:) - (2*rloc + anchor);
-        defFeat{j} = -abs([pDef(2) pDef(1) pDef(2)*pDef(2) pDef(1)*pDef(1)]);
+        if (model.partfilters{model.components{c}.parts{j}.partindex}.fake)
+            continue;
+        end
+        psize = size(model.partfilters{model.components{c}.parts{j}.partindex}.w);
+        anchor = model.defs{model.components{c}.parts{j}.defindex}.anchor;
         
-        psize = size(model.partfilters{model.components{c}.parts{j}.partidx}.w);
+        pDef = (2*rloc + [anchor(2) anchor(1)]) - plocs(j,:);
+        defFeat{j} = -([pDef(1)*pDef(1) pDef(1) pDef(2)*pDef(2) pDef(2)]);
         partloc = plocs(j,:);
-        j
-        partloc
-        psize
-        size(paddedPfeat)
         partFeat{j} = paddedPfeat(partloc(1):partloc(1)+psize(1)-1, partloc(2):partloc(2)+psize(2)-1, :);
+        if (isPos)
+            pDefFlipped = (2*rloc + [anchor(2) anchor(1)]) - plocsFlipped(j,:);
+            defFeatFlipped{j} = -([pDefFlipped(1)*pDefFlipped(1) pDefFlipped(1) pDefFlipped(2)*pDefFlipped(2) pDefFlipped(2)]);
+            partlocFlipped = plocsFlipped(j,:);
+            partFeatFlipped{j} = paddedPfeatFlipped(partlocFlipped(1):partlocFlipped(1)+psize(1)-1, partlocFlipped(2):partlocFlipped(2)+psize(2)-1, :);
+        end
+        
         partnerPartIdx = model.partfilters{model.components{c}.parts{j}.partindex}.partner;
         if partnerPartIdx > 0
-            partnerLoc = plocs(model.partfilters{partnerPartIdx}.partnumber,:);
             partnerAnchor = model.defs{partnerPartIdx}.anchor;
-            partnerAnchorAbsolute = 2*([model.pady model.padx] + rsize)  + partnerAnchor;
-            partnerDef = -abs([partnerLoc(2)-partnerAnchorAbsolute(2), partnerLoc(1)-partnerAnchorAbsolute(1), (partnerLoc(2)-partnerAnchorAbsolute(2))^2, (partnerLoc(1)-partnerAnchorAbsolute(2))^2]);
-            defFeat{j} = defFeat{j} + partnerDef(end:-1:1);
+            partnerAnchorAbsolute = 2*([model.padx model.pady] + [rsize(2) rsize(1)])  + partnerAnchor;
+            
+            partnerLoc = plocs(model.partfilters{partnerPartIdx}.partnumber,:);
+            partnerDef = -[(partnerLoc(2)-partnerAnchorAbsolute(2))^2, partnerLoc(2)-partnerAnchorAbsolute(2), (partnerLoc(1)-partnerAnchorAbsolute(2))^2, partnerLoc(1)-partnerAnchorAbsolute(1)];
+            defFeat{j} = defFeat{j} + partnerDef;
             
             partnerFeat = paddedPfeat(partnerLoc(1):partnerLoc(1)+psize(1)-1, partnerLoc(2):partnerLoc(2)+psize(2)-1, :);
             partFeat{j} = partFeat{j} + flipfeat(partnerFeat);
+            
+            if (isPos)
+                partnerLocFlipped = plocsFlipped(model.partfilters{partnerPartIdx}.partnumber,:);
+                partnerDefFlipped = -[(partnerLocFlipped(2)-partnerAnchorAbsolute(2))^2, partnerLocFlipped(2)-partnerAnchorAbsolute(2), (partnerLocFlipped(1)-partnerAnchorAbsolute(2))^2, partnerLocFlipped(1)-partnerAnchorAbsolute(1)];
+                defFeatFlipped{j} = defFeatFlipped{j} + partnerDefFlipped;
+                
+                partnerFeatFlipped = paddedPfeatFlipped(partnerLocFlipped(1):partnerLocFlipped(1)+psize(1)-1, partnerLocFlipped(2):partnerLocFlipped(2)+psize(2)-1, :);
+                partFeat{j} = partFeat{j} + flipfeat(partnerFeatFlipped);
+            end
         else
-            partFeat{j} = symmetrizeFeature(partFeat{j});
+            partFeat{j} = symmetrizeFeature(partFeat{j}, psize);
+            
+            if (isPos)
+                partFeatFlipped{j} = symmetrizeFeature(partFeatFlipped{j}, psize);
+            end
         end
-        
-        partFeatFlipped{j} = flipfeat(partFeat{j});
     end
     
+    yc = round(rloc(1) + rsize(1)/2);
+    xc = round(rloc(2) + rsize(2)/2);
+    
+    % save best feature
+    classVal = 1;
+    num = num+1;
+    serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+num, l, xc, yc, fid);
+    % if its positive latent, also save the flipped feature
     if isPos
-        classVal = 1;
         num = num+1;
-        serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+num, l, xc, yc, fid);
-        num = num+1;
-        serializeFeature(flipfeat(rootFeat), partFeatFlipped, defFeat, model, c, classVal, baseFeatureId+num, l, xc, yc, fid);
-    else
-        classVal = -1;
-        num = num+1;
-        serializeFeature(rootFeat, partFeat, defFeat, model, c, classVal, baseFeatureId+num, l, xc, yc, fid);
+        serializeFeature(rootFeatFlipped, partFeatFlipped, defFeatFlipped, model, c, classVal, baseFeatureId+num, l, xc, yc, fid);
     end
     
     serializeTime = toc(t);
@@ -190,10 +239,10 @@ fwrite(fid, header, 'int32');
 buf1 = [oblocklabel; 1; rblocklabel; rootFeat(:)];
 fwrite(fid, buf1, 'single');
 for i=1:model.numparts
-    pidx = model.components{componentIdx}.parts{i}.partidx;
-    if (model.partfilters{pidx}.fake)
+    if (model.partfilters{model.components{componentIdx}.parts{i}.partindex}.fake)
         continue;
     end
+    pidx = model.components{componentIdx}.parts{i}.partidx;
     pblocklabel = model.partfilters{pidx}.blocklabel;
     didx = model.components{componentIdx}.parts{i}.defidx;
     dblocklabel = model.defs{didx}.blocklabel;

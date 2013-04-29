@@ -15,12 +15,11 @@ catch
   for i = 1:length(ids);
     fprintf('%s: testing: %s %s, %d/%d\n', cls, testset, VOCyear, ...
             i, length(ids));
-    im = imread(sprintf(VOCopts.imgpath, ids{i}));  
-    [featPyramid scale] = loadFeaturePyramidCache(ids{i}, sprintf(VOCopts.imgpath, ids{i}), model.sbin, model.interval);
-    b = detect(featPyramid, scale, model, model.thresh, false, []);
+    [feat, scales] = loadFeaturePyramidCache(ids{i}, sprintf(VOCopts.imgpath, ids{i}), model.sbin, model.interval);
+    b = detect(feat, scales, model, model.thresh, false, false);
     if ~isempty(b)
       b1 = b(:,[1 2 3 4 end]);
-      b1 = clipboxes(im, b1);
+      b1 = clipboxes(zeros(model.sbin*size(feat{1+model.interval},1), model.sbin*size(feat{1+model.interval},2)), b1);
       boxes{i} = nms(b1, 0.5);
     else
       boxes{i} = [];

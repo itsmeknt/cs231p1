@@ -17,14 +17,15 @@ detections = cell(1,n);
 detectionsAtThreshold = cell(1,n);
 dtic = tic;
 for i=1:n
+    [i n]
     if (doPosLatent)
         entry = posOrNegs(i);
         trueBbox = [entry.x1, entry.y1, entry.x2, entry.y2];
     else
         trueBbox = [];
     end
-    id = posOrNegs(i).id
-    [feat, scales] = loadFeaturePyramidCache(posOrNegs(i).id, posOrNegs(i).im, sbin, interval);
+    id = posOrNegs(i).id;
+    [feat, scales] = loadFeaturePyramidCache(id, posOrNegs(i).im, sbin, interval);
     [detectionBboxes{i} detections{i}, detectionsAtThreshold{i}] = detect(feat, scales, model, threshold, chooseBest, trueBbox);
 %     [detectionBboxes{i} detections{i}, detectionsAtThreshold{i}] = detect(dummy, scales, model, threshold, chooseBest, trueBbox);
 %     break;

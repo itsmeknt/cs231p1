@@ -1,4 +1,4 @@
-function model = train(name, model, pos, neg )
+function model = train_old(name, model, pos, neg )
 
 % model = train(name, model, pos, neg)
 % Train LSVM. (For now it's just an SVM)
@@ -27,13 +27,7 @@ for i = 1:model.numcomponents
 end
 maxnum = floor(maxsize / (dim * 4));
 
-cache = false;
 % Reset some of the tempoaray files, just in case
-% reset data file
-if ~cache
-    fid = fopen(datfile, 'wb');                                                    % comment out
-    fclose(fid);                                                                   % comment out
-end
 % reset header file
 writeheader(hdrfile, 0, labelsize, model);  
 % reset info file
@@ -47,18 +41,20 @@ fclose(fid);
 writelob(lobfile, model)
 
 
-% Find the positive examples and safe them in the data file
-if ~cache
-    fid = fopen(datfile, 'w');                                                     % comment out
-    num = poswarp(name, model, 1, pos, fid);                                       % comment out
-    
-    % Add random negatives
-    num = num + negrandom(name, model, 1, neg, maxnum-num, fid)                   % comment out
-    fclose(fid);                                                                   % comment out
-else
-    num = 79793;
-end
+% reset data file
+fid = fopen(datfile, 'wb');
+fclose(fid);
 
+% Find the positive examples and safe them in the data file
+fid = fopen(datfile, 'w');
+num = poswarp(name, model, 1, pos, fid);
+
+% Add random negatives
+num = num + negrandom(name, model, 1, neg, maxnum-num, fid);
+fclose(fid);
+
+        
+num = 79793;
 % learn model
 writeheader(hdrfile, num, labelsize, model);
 % reset initial model 
@@ -67,8 +63,7 @@ fwrite(fid, zeros(sum(model.blocksizes), 1), 'double');
 fclose(fid);
 
 % Call the SVM learning code
-
- cmd = sprintf('./learn %.4f %.4f %s %s %s %s %s', ...
+cmd = sprintf('./learn %.4f %.4f %s %s %s %s %s', ...
               C, J, hdrfile, datfile, modfile, inffile, lobfile);
 fprintf('executing: %s\n', cmd);
 status = unix(cmd);
@@ -76,7 +71,6 @@ if status ~= 0
   fprintf('command `%s` failed\n', cmd);
   keyboard;
 end
-
     
 fprintf('parsing model\n');
 blocks = readmodel(modfile, model);
@@ -85,12 +79,11 @@ model = parsemodel(model, blocks);
     
 % compute threshold for high recall
 P = find((labels == 1) .* unique);
-
 pos_vals = sort(vals(P));
 model.thresh = pos_vals(ceil(length(pos_vals)*0.05));
 
 % cache model
-save([cachedir name '_model_old'], 'model');
+save([cachedir name '_model'], 'model');
 
 
 % get positive examples by warping positive bounding boxes
