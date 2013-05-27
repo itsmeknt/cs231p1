@@ -1,6 +1,8 @@
 mex -O resize.cc
-mex -O dt.cc
 mex -O features.cc
+mex -O OneDDT.cc
+mex -O fconv.cc
+
 
 % use one of the following depending on your setup
 % 1 is fastest, 3 is slowest 
